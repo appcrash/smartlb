@@ -1,6 +1,8 @@
 use std::io;
-use tokio::net::{TcpStream,TcpListener};
+use tokio::net::TcpListener;
+use smart_lb::proxy::Proxy;
 use tokio::prelude::*;
+use futures;
 
 
 #[tokio::main]
@@ -10,8 +12,15 @@ async fn main() -> io::Result<()> {
     let mut listener = TcpListener::bind(smart_lb::proxy::LISTEN_ADDRESS).await?;
 
     loop {
-        let (_, addr) = listener.accept().await?;
+        let (mut stream, addr) = listener.accept().await?;
         println!("ip is {:?}",addr.ip());
+
+        tokio::spawn(async move {
+            let (mut reader,mut writer) = stream.split();
+            let mut p = Proxy::new(&mut reader,&mut writer);
+            let re = p.run().await;
+            println!("result is {:?}",re);
+        });
         io::Result::Ok(());
     }
 }
