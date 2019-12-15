@@ -22,6 +22,7 @@ main(_Args) ->
 
 start_proxy(Name,Port) ->
   State = #server_state{port = Port},
+  trait:start_link(),
   gen_server:start_link({local,Name},?MODULE,State,[]).
 
 init(State) ->
@@ -115,15 +116,9 @@ append_packet(Socket,Data) ->
   end.
 
 analyze_trait(Socket,Data) when byte_size(Data) < ?INIT_PACKET_THRESHOLD ->
-  {_,MP} = re:compile("(?i)service-provider:\\s*(\\w+)\\s*\r\n"),
-  case re:run(Data,MP,[{capture,[1],list}]) of
-    {match,[Key]} ->
-      case get_proxy_addr(Key) of
-        {ok,Addr} -> {ok,Addr,Data};
-        _ -> append_packet(Socket,Data)
-      end;
-    _ ->
-      append_packet(Socket,Data)
+  case trait:analyze(Data) of
+    {match,Addr} -> {ok,Addr,Data};
+    no_match -> append_packet(Socket,Data)
   end;
 analyze_trait(Socket,_) ->
   error.
