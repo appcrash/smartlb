@@ -1,7 +1,7 @@
 -module(proxy).
 -behaviour(gen_server).
 
--export([main/1,init/1,handle_cast/2,handle_call/3,code_change/3]).
+-export([main/0,init/1,handle_cast/2,handle_call/3,code_change/3]).
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
 -define(SRC_PORT,7777).
@@ -16,7 +16,7 @@
 }).
 
 
-main(_Args) ->
+main() ->
   io:format("proxy starting ...~n"),
   start_proxy(smart_lb,?SRC_PORT).
 
