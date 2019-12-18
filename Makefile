@@ -6,13 +6,13 @@
 	erlc -W $<
 
 
-ERL = erl -noshell -boot start_clean
+ERL = erl -noshell -boot start_sasl
 
 
-MODS = proxy trait
+MODS = proxy trait lb lb_sup
 
 all: compile
-	${ERL} -s proxy main
+	${ERL} -s lb start
 	
 compile: ${MODS:%=%.beam}
 

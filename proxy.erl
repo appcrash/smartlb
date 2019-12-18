@@ -1,11 +1,10 @@
 -module(proxy).
 -behaviour(gen_server).
 
--export([main/0,init/1,handle_cast/2,handle_call/3,code_change/3]).
+-export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3]).
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
 -define(SRC_PORT,7777).
--define(DEST_PORT,9999).
 -define(INIT_PACKET_THRESHOLD,512).
 
 
@@ -16,14 +15,11 @@
 }).
 
 
-main() ->
-  io:format("proxy starting ...~n"),
-  start_proxy(smart_lb,?SRC_PORT).
+start_link() ->
+  io:format("proxy server starting ~n"),
+  State = #server_state{port = ?SRC_PORT},
+  gen_server:start_link({local,?MODULE},?MODULE,State,[]).
 
-start_proxy(Name,Port) ->
-  State = #server_state{port = Port},
-  trait:start_link(),
-  gen_server:start_link({local,Name},?MODULE,State,[]).
 
 init(State) ->
   #server_state{port = Port} = State,
@@ -116,17 +112,13 @@ append_packet(Socket,Data) ->
   end.
 
 analyze_trait(Socket,Data) when byte_size(Data) < ?INIT_PACKET_THRESHOLD ->
+  io:format("analyze_trait: ~p~n",[byte_size(Data)]),
   case trait:analyze(Data) of
     {match,Addr} -> {ok,Addr,Data};
     no_match -> append_packet(Socket,Data)
   end;
 analyze_trait(Socket,_) ->
   error.
-
-
-get_proxy_addr(Key) ->
-  Info = #{"xf" => {"127.0.0.1",9999}, "fx" => {"127.0.0.1",8000} },
-  maps:find(Key,Info).
 
 handle_cast(stop,State) ->
   {stop,normal,State}.

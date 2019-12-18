@@ -23,23 +23,25 @@ init(_Args) ->
       #matcher{
         regex_mp = MP1,
         keyword = "xf",
-        addr ={"127.0.0.1",8000}
+        addr ={"127.0.0.1",18000}
       },
       #matcher{
         regex_mp = MP2,
         keyword = "fx",
-        addr = {"127.0.0.1",9000}
+        addr = {"127.0.0.1",19000}
       }
     ]
   },
+
   {ok,State}.
 
 start_link() ->
-  gen_server:start_link({local,trait},?MODULE,[],[]).
+  io:format("trait server starting ~n"),
+  gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 % match one by one, first matched one wins
 handle_call({route,Data},_From,State = #state{matcher_list = ML}) ->
-  io:format("ML:  ~p",[ML]),
+  % io:format("ML:  ~p",[ML]),
   Matched = lists:search(fun(#matcher{regex_mp = MP,keyword = K}) ->
     case re:run(Data,MP,[{capture,[1],list}]) of
       {match,[Key]} ->
@@ -50,14 +52,17 @@ handle_call({route,Data},_From,State = #state{matcher_list = ML}) ->
   case Matched of
     {value,#matcher{addr = Addr}} -> {reply,{match,Addr},State};
     false -> {reply,no_match,State}
-  end.
+  end;
+handle_call({route1,Data},_From,State = #state{matcher_list = ML}) ->
+  io:format("eeee~n"),
+  io:format("~p",Data).
 
 handle_cast(stop,State) ->
   {stop,normal,State}.
 
-
 -spec analyze(binary()) -> tuple().
 analyze(Data) ->
   gen_server:call(?MODULE,{route,Data}).
+
 
 code_change(_OldVersion, Library, _Extra) -> {ok, Library}.
