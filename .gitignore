@@ -1,3 +1,5 @@
 *.dump
 *.beam
 target/*
+
+lb.conf

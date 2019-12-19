@@ -9,6 +9,13 @@ start_link() ->
 init(_) ->
   {ok, {{one_for_one, 3 ,10},
     [
+      {config,
+        {config,start_link,[]},
+        permanent,
+        5000,
+        worker,
+        [config]
+      },
       {trait,                   %tag
         {trait,start_link,[]},  %mfa
         permanent,   % restart
@@ -23,5 +30,6 @@ init(_) ->
         worker,
         [proxy]
       }
+
     ]
   }}.

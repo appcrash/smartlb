@@ -5,8 +5,14 @@
 -export([init/1,start/0]).
 
 start() ->
-  process_flag(trap_exit,true),
+  % process_flag(trap_exit,true),
   supervisor:start_link({local,?MODULE},?MODULE,[]),
+  timer:sleep(1000),
+  case config:get_config() of
+    {ok,Config} -> io:format("### ~p~n",[Config]);
+    error -> io:format("error ...~n")
+  end,
+  % exit(normal),
   loop().
 
 loop() ->

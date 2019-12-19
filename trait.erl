@@ -3,22 +3,15 @@
 -export([init/1,start_link/0,handle_call/3,handle_cast/2,code_change/3]).
 -export([analyze/1]).
 
+-include("common.hrl").
 
--record(matcher,{
-  regex_mp,
-  keyword,
-  addr
-}).
 
--record(state,{
-  matcher_list
-}).
 
 
 init(_Args) ->
   {_,MP1} = re:compile("(?i)service-provider:\\s*(\\w+)\\s*\r\n"),
   {_,MP2} = re:compile("(?i)service-provider:\\s*(\\w+)\\s*\r\n"),
-  State = #state{
+  State = #match_state{
     matcher_list = [
       #matcher{
         regex_mp = MP1,
@@ -40,7 +33,7 @@ start_link() ->
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 % match one by one, first matched one wins
-handle_call({route,Data},_From,State = #state{matcher_list = ML}) ->
+handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
   % io:format("ML:  ~p",[ML]),
   Matched = lists:search(fun(#matcher{regex_mp = MP,keyword = K}) ->
     case re:run(Data,MP,[{capture,[1],list}]) of
@@ -52,10 +45,8 @@ handle_call({route,Data},_From,State = #state{matcher_list = ML}) ->
   case Matched of
     {value,#matcher{addr = Addr}} -> {reply,{match,Addr},State};
     false -> {reply,no_match,State}
-  end;
-handle_call({route1,Data},_From,State = #state{matcher_list = ML}) ->
-  io:format("eeee~n"),
-  io:format("~p",Data).
+  end.
+
 
 handle_cast(stop,State) ->
   {stop,normal,State}.

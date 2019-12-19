@@ -9,7 +9,7 @@
 ERL = erl -noshell -boot start_sasl
 
 
-MODS = proxy trait lb lb_sup
+MODS = lb lb_sup proxy trait config 
 
 all: compile
 	${ERL} -s lb start
