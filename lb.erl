@@ -7,12 +7,16 @@
 start() ->
   % process_flag(trap_exit,true),
   supervisor:start_link({local,?MODULE},?MODULE,[]),
-  timer:sleep(1000),
+  % timer:sleep(1000),
   case config:get_config() of
-    {ok,Config} -> io:format("### ~p~n",[Config]);
-    error -> io:format("error ...~n")
+    {ok,Config} ->
+      io:format("######~n ~p~n######~n",[Config]),
+      ok;
+    error ->
+      io:format("config error, shutdown ... ~n"),
+      exit(shutdown)
   end,
-  % exit(normal),
+
   loop().
 
 loop() ->

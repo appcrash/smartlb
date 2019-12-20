@@ -6,27 +6,21 @@
 -include("common.hrl").
 
 
-
-
 init(_Args) ->
-  {_,MP1} = re:compile("(?i)service-provider:\\s*(\\w+)\\s*\r\n"),
-  {_,MP2} = re:compile("(?i)service-provider:\\s*(\\w+)\\s*\r\n"),
-  State = #match_state{
-    matcher_list = [
-      #matcher{
-        regex_mp = MP1,
-        keyword = "xf",
-        addr ={"127.0.0.1",18000}
-      },
-      #matcher{
-        regex_mp = MP2,
-        keyword = "fx",
-        addr = {"127.0.0.1",19000}
-      }
-    ]
-  },
+  ML = case config:get_config() of
+    {ok,Config} ->
+      lists:map(fun({matcher,MP,Keyword,Backend}) ->
+        #matcher{
+          regex_mp = MP,
+          keyword = Keyword,
+          addr = lists:nth(1,Backend)
+        }
+      end,Config);
+    error -> []
+  end,
 
-  {ok,State}.
+  S = #match_state{matcher_list = ML},
+  {ok,S}.
 
 start_link() ->
   io:format("trait server starting ~n"),

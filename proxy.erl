@@ -1,17 +1,16 @@
 -module(proxy).
 -behaviour(gen_server).
 
--export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3]).
+-export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3,terminate/2]).
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
 -define(SRC_PORT,7777).
 -define(INIT_PACKET_THRESHOLD,512).
-
+-define(PREFORK,1).
 
 -record(server_state,{
   port,
   listen_socket = null
-
 }).
 
 
@@ -22,64 +21,51 @@ start_link() ->
 
 
 init(State) ->
+  process_flag(trap_exit,true),
   #server_state{port = Port} = State,
   case gen_tcp:listen(Port,?TCP_OPTIONS) of
       {ok, Listen_Socket} ->
           NewState = State#server_state{listen_socket = Listen_Socket},
-          Pid = spawn(fun() -> keep_process_loop(4,Listen_Socket) end),
-          register(kpl,Pid),
+          prefork(?PREFORK,Listen_Socket),
           {ok, NewState};
 
-      {error, Reason} -> {stop, Reason}
+      {error, Reason} ->
+        io:format("proxy can not create listen socket: ~p~n",[Reason]),
+        {stop, Reason}
   end.
 
 
-keep_process_loop(Remaining,Listen_Socket) when Remaining > 0 ->
-  io:format("keep process loop remaining ~p~n",[Remaining]),
-  spawn(fun() -> accept(Listen_Socket) end),
-  keep_process_loop(Remaining - 1,Listen_Socket);
-keep_process_loop(0,Listen_Socket) ->
-  receive
-    {accept_finished} -> keep_process_loop(1,Listen_Socket)
+terminate(Reason,_State = #server_state{listen_socket = LS}) ->
+  io:format("proxy terminate: ~p~n",[Reason]),
+  gen_tcp:close(LS).
+
+code_change(_OldVersion, Library, _Extra) -> {ok, Library}.
+
+handle_cast(stop,State) ->
+  {stop,normal,State}.
+
+handle_call(accepted, _From, State = #server_state{listen_socket = LS}) ->
+  Pid = spawn(fun() -> accept(LS) end),
+  {reply,Pid,State}.
+
+prefork(Remaining,LS) ->
+  if
+    Remaining > 0 ->
+      spawn(fun() -> accept(LS) end),
+      prefork(Remaining - 1,LS);
+    true -> ok
   end.
 
 
 accept(Listen_Socket) ->
-  case gen_tcp:accept(Listen_Socket) of
+  io:format("new proxy accept process~n"),
+  A = gen_tcp:accept(Listen_Socket),
+  gen_server:call(?MODULE,accepted),
+  case A of
     {ok,Socket} -> process_socket(Socket);
     {error,Reason} -> io:format("accept error ~p~n",[Reason])
-  end,
-  kpl ! {accept_finished}.
-
-
-
-
-socket_loop(Socket) ->
-  receive
-    {ready,Pid} ->
-      socket_loop(Socket,Pid);
-    {ready_buffered,Pid,Buffered_Packet} ->
-      socket_loop(Socket,Pid,Buffered_Packet)
   end.
-socket_loop(Socket,Pid,Buffered_Packet) ->
-  gen_tcp:send(Socket,Buffered_Packet),
-  socket_loop(Socket,Pid).
-socket_loop(Socket,Pid) ->
-  inet:setopts(Socket,[{active,true}]),
-  receive
-    {tcp,Socket,Packet} ->
-      Pid ! {send,Packet},
-      socket_loop(Socket,Pid);
 
-    {send,Packet} ->
-      gen_tcp:send(Socket,Packet),
-      socket_loop(Socket,Pid);
-
-    {tcp_closed,_} ->
-      Pid ! {peer_closed};
-
-    {peer_closed} -> gen_tcp:close(Socket)
-  end.
 
 process_socket(Socket) ->
   case analyze_trait(Socket,<<>>) of
@@ -105,26 +91,56 @@ process_socket(Socket) ->
   end.
 
 
-append_packet(Socket,Data) ->
-  case gen_tcp:recv(Socket,0) of
-        {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
-        {error,Reason} -> error
+socket_loop(Socket) ->
+  receive
+    {ready,Pid} ->
+      socket_loop(Socket,Pid);
+    {ready_buffered,Pid,Buffered_Packet} ->
+      socket_loop(Socket,Pid,Buffered_Packet)
+  end.
+socket_loop(Socket,Pid,Buffered_Packet) ->
+  gen_tcp:send(Socket,Buffered_Packet),
+  inet:setopts(Socket,[{active,true}]),
+  socket_loop(Socket,Pid).
+socket_loop(Socket,Pid) ->
+  receive
+    {tcp,Socket,Packet} ->
+      Pid ! {send,Packet},
+      socket_loop(Socket,Pid);
+
+    {tcp_closed,_} ->
+      Pid ! {peer_closed};
+
+    {tcp_error, _Socket, Reason} ->
+      io:format("tcp error with reason: ~p~n",[Reason]),
+      gen_tcp:close(Socket),
+      Pid ! {peer_closed};
+
+    {send,Packet} ->
+      gen_tcp:send(Socket,Packet),
+      socket_loop(Socket,Pid);
+
+    {peer_closed} -> gen_tcp:close(Socket)
   end.
 
-analyze_trait(Socket,Data) when byte_size(Data) < ?INIT_PACKET_THRESHOLD ->
-  io:format("analyze_trait: ~p~n",[byte_size(Data)]),
-  case trait:analyze(Data) of
-    {match,Addr} -> {ok,Addr,Data};
-    no_match -> append_packet(Socket,Data)
-  end;
-analyze_trait(Socket,_) ->
-  error.
 
-handle_cast(stop,State) ->
-  {stop,normal,State}.
-
-
-handle_call(_Msg, _Caller, State) -> {noreply, State}.
-
-
-code_change(_OldVersion, Library, _Extra) -> {ok, Library}.
+% receive some bytes from incoming socket, analyze it to determine routing strategy
+analyze_trait(Socket,Data) ->
+  Size = byte_size(Data),
+  if
+    Size == 0 ->
+      case gen_tcp:recv(Socket,0) of
+        {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
+        {error,_Reason} -> error
+      end;
+    Size < ?INIT_PACKET_THRESHOLD ->
+      case trait:analyze(Data) of
+        {match,Addr} -> {ok,Addr,Data};
+        no_match ->
+          case gen_tcp:recv(Socket,0) of
+            {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
+            {error,_Reason} -> error
+          end
+      end;
+    true -> error
+  end.

@@ -10,14 +10,16 @@ The trait can be anything from information from socket, packet, like:
 Once trait resolved, proxy the connection to backend servers.
 
 
-# Config file
+# Config File
 
 lb.conf is the main config file. it should be in the same directory of lb working dir.
 
 For simplicity, it just contains the erlang terms that will be evaluated at runtime.
 
 > {matcher,Match_Pattern,Keyword,Backend_List}.
+>
 > {matcher,...}.
+>
 > ...
 
 
