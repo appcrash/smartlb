@@ -20,6 +20,8 @@ For simplicity, it just contains the erlang terms that will be evaluated at runt
 >
 > {matcher,...}.
 >
+> {default_matcher,Backend_List}
+>
 > ...
 
 
@@ -27,6 +29,7 @@ Example:
 
 ```erlang
 {matcher,"(?i)host:\\s*(\\w+)\\s*\r\n","www.google.com",[{"127.0.0.1",8080}]}.
+{default_matcher,[{"127.0.0.1",9090}]}.
 ```
 
-It will search "Host" header in the first 512 bytes of every incoming connection, and if header value is "www.google.com" proxies connection to 127.0.0.1:8080. In fact, the incoming connection is not necessarily http procotol, it can be any binary procotol. You can put lots of matcher here, and first matched one wins just like "filter" in some http framework.
+It will search "Host" header in the first 512 bytes of every incoming connection, and if header value is "www.google.com" proxies connection to 127.0.0.1:8080, otherwise the default 127.0.0.1:9090 is selected. In fact, the incoming connection is not necessarily http procotol, it can be any binary procotol. You can put lots of matcher here, and first matched one wins just like "filter" in some http framework.

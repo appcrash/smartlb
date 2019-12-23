@@ -58,7 +58,7 @@ prefork(Remaining,LS) ->
 
 
 accept(Listen_Socket) ->
-  io:format("new proxy accept process~n"),
+  % io:format("new proxy accept process~n"),
   A = gen_tcp:accept(Listen_Socket),
   gen_server:call(?MODULE,accepted),
   case A of

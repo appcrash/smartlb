@@ -9,12 +9,17 @@
 init(_Args) ->
   ML = case config:get_config() of
     {ok,Config} ->
-      lists:map(fun({matcher,MP,Keyword,Backend}) ->
-        #matcher{
-          regex_mp = MP,
-          keyword = Keyword,
-          addr = lists:nth(1,Backend)
-        }
+      lists:map(fun(M) ->
+        case M of
+          {matcher,MP,Keyword,Backend} ->
+            #matcher{
+              regex_mp = MP,
+              keyword = Keyword,
+              addr = lists:nth(1,Backend)
+            };
+          {default_matcher,Addr} ->
+            #default_matcher{addr = lists:nth(1,Addr)}
+        end
       end,Config);
     error -> []
   end,
@@ -29,15 +34,23 @@ start_link() ->
 % match one by one, first matched one wins
 handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
   % io:format("ML:  ~p",[ML]),
-  Matched = lists:search(fun(#matcher{regex_mp = MP,keyword = K}) ->
-    case re:run(Data,MP,[{capture,[1],list}]) of
-      {match,[Key]} ->
-        Key == K;
+  Matched = lists:search(fun(M) ->
+    case M of
+      #matcher{regex_mp = MP,keyword = K} ->
+        case re:run(Data,MP,[{capture,[1],list}]) of
+          {match,[Key]} ->
+            Key == K;
+          _ -> false
+        end;
+      #default_matcher{addr = _Addr} -> true;
+
       _ -> false
     end
   end,ML),
+
   case Matched of
     {value,#matcher{addr = Addr}} -> {reply,{match,Addr},State};
+    {value,#default_matcher{addr = Addr}} -> {reply,{match,Addr},State};
     false -> {reply,no_match,State}
   end.
 
