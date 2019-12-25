@@ -3,9 +3,11 @@
 
 -export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3,terminate/2]).
 
--define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
+-define(TCP_OPTIONS, [binary, {packet, 0}, {active, false},
+ {reuseaddr, true}, {nodelay, true}]).
+-define(TCP_CONN_OPTIONS,[binary, {packet, 0}, {active, false},
+ {reuseaddr, true}, {nodelay, true}]).
 -define(SRC_PORT,7777).
--define(INIT_PACKET_THRESHOLD,512).
 -define(PREFORK,1).
 
 -record(server_state,{
@@ -68,12 +70,15 @@ accept(Listen_Socket) ->
 
 
 process_socket(Socket) ->
+  inet:setopts(Socket,[{nopush, false}]),
   case analyze_trait(Socket,<<>>) of
     error ->
       io:format("socket stream has no trait, close it ~n"),
       gen_tcp:close(Socket);
     {ok,{Ip,Port},Buffered_Packet} ->
-      case gen_tcp:connect(Ip,Port,?TCP_OPTIONS) of
+      % io:format("selected: ~p:~p~n",[Ip,Port]),
+      % io:format("~p~n^^^^send buffered data^^^~n",[binary_to_list(Buffered_Packet)]),
+      case gen_tcp:connect(Ip,Port,?TCP_CONN_OPTIONS) of
         {ok,To_Socket} ->
           P1 = spawn(fun() -> socket_loop(Socket) end),
           P2 = spawn(fun() -> socket_loop(To_Socket) end),
@@ -94,14 +99,13 @@ process_socket(Socket) ->
 socket_loop(Socket) ->
   receive
     {ready,Pid} ->
+      inet:setopts(Socket,[{active,true}]),
       socket_loop(Socket,Pid);
     {ready_buffered,Pid,Buffered_Packet} ->
-      socket_loop(Socket,Pid,Buffered_Packet)
+      gen_tcp:send(Socket,Buffered_Packet),
+      inet:setopts(Socket,[{active,true}]),
+      socket_loop(Socket,Pid)
   end.
-socket_loop(Socket,Pid,Buffered_Packet) ->
-  gen_tcp:send(Socket,Buffered_Packet),
-  inet:setopts(Socket,[{active,true}]),
-  socket_loop(Socket,Pid).
 socket_loop(Socket,Pid) ->
   receive
     {tcp,Socket,Packet} ->
@@ -117,6 +121,7 @@ socket_loop(Socket,Pid) ->
       Pid ! {peer_closed};
 
     {send,Packet} ->
+      % io:format("~p~n^^^^^send data^^^^^~n",[binary_to_list(Packet)]),
       gen_tcp:send(Socket,Packet),
       socket_loop(Socket,Pid);
 
@@ -126,21 +131,13 @@ socket_loop(Socket,Pid) ->
 
 % receive some bytes from incoming socket, analyze it to determine routing strategy
 analyze_trait(Socket,Data) ->
-  Size = byte_size(Data),
-  if
-    Size == 0 ->
+  % io:format("analyzing:~n~p~n^^^^analyzed^^^^n",[binary_to_list(Data)]),
+  case trait:analyze(Data) of
+    {match,Addr} -> {ok,Addr,Data};
+    again ->
       case gen_tcp:recv(Socket,0) of
         {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
         {error,_Reason} -> error
       end;
-    Size < ?INIT_PACKET_THRESHOLD ->
-      case trait:analyze(Data) of
-        {match,Addr} -> {ok,Addr,Data};
-        no_match ->
-          case gen_tcp:recv(Socket,0) of
-            {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
-            {error,_Reason} -> error
-          end
-      end;
-    true -> error
+    no_match -> error
   end.

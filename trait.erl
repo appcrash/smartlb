@@ -5,6 +5,8 @@
 
 -include("common.hrl").
 
+-define(INIT_PACKET_THRESHOLD,64).
+
 
 init(_Args) ->
   ML = case config:get_config() of
@@ -34,6 +36,7 @@ start_link() ->
 % match one by one, first matched one wins
 handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
   % io:format("ML:  ~p",[ML]),
+  S = byte_size(Data),
   Matched = lists:search(fun(M) ->
     case M of
       #matcher{regex_mp = MP,keyword = K} ->
@@ -42,7 +45,7 @@ handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
             Key == K;
           _ -> false
         end;
-      #default_matcher{addr = _Addr} -> true;
+      #default_matcher{addr = _Addr} when S > ?INIT_PACKET_THRESHOLD -> true;
 
       _ -> false
     end
@@ -51,6 +54,7 @@ handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
   case Matched of
     {value,#matcher{addr = Addr}} -> {reply,{match,Addr},State};
     {value,#default_matcher{addr = Addr}} -> {reply,{match,Addr},State};
+    false when S < ?INIT_PACKET_THRESHOLD -> {reply,again,State}; % still has chance to match
     false -> {reply,no_match,State}
   end.
 
