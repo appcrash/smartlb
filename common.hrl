@@ -5,6 +5,7 @@
 }).
 
 -record(default_matcher,{
+  timeout,
   addr
 }).
 

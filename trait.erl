@@ -19,8 +19,8 @@ init(_Args) ->
               keyword = Keyword,
               addr = lists:nth(1,Backend)
             };
-          {default_matcher,Addr} ->
-            #default_matcher{addr = lists:nth(1,Addr)}
+          {default_matcher,Timeout,Addr} ->
+            #default_matcher{timeout = Timeout,addr = lists:nth(1,Addr)}
         end
       end,Config);
     error -> []
@@ -45,7 +45,7 @@ handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
             Key == K;
           _ -> false
         end;
-      #default_matcher{addr = _Addr} when S > ?INIT_PACKET_THRESHOLD -> true;
+      #default_matcher{addr = _Addr} -> true;
 
       _ -> false
     end
@@ -53,8 +53,9 @@ handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
 
   case Matched of
     {value,#matcher{addr = Addr}} -> {reply,{match,Addr},State};
-    {value,#default_matcher{addr = Addr}} -> {reply,{match,Addr},State};
-    false when S < ?INIT_PACKET_THRESHOLD -> {reply,again,State}; % still has chance to match
+    {value,#default_matcher{addr = Addr}} when S > ?INIT_PACKET_THRESHOLD
+      -> {reply,{match,Addr},State}; % enough inital data to select the default matcher
+    {value,#default_matcher{timeout = Timeout}} -> {reply,{again,Timeout},State}; % initial data is not enough, wait no more than Timeout
     false -> {reply,no_match,State}
   end.
 

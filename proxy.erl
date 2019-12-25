@@ -130,13 +130,22 @@ socket_loop(Socket,Pid) ->
 
 
 % receive some bytes from incoming socket, analyze it to determine routing strategy
+analyze_trait(Socket,<<>>) ->
+  % io:format("analyze_trait without data~n"),
+  case gen_tcp:recv(Socket,0) of      % receive first packet without timeout
+    {ok,Packet} -> analyze_trait(Socket,Packet);
+    {error,_} -> error
+  end;
 analyze_trait(Socket,Data) ->
   % io:format("analyzing:~n~p~n^^^^analyzed^^^^n",[binary_to_list(Data)]),
   case trait:analyze(Data) of
     {match,Addr} -> {ok,Addr,Data};
-    again ->
-      case gen_tcp:recv(Socket,0) of
+    {again,Timeout} ->
+      case gen_tcp:recv(Socket,0,Timeout) of
         {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
+        {error,timeout} ->
+          % io:format("incoming connection has not enough data within timeout value, close the socket~n"),
+          error;
         {error,_Reason} -> error
       end;
     no_match -> error
