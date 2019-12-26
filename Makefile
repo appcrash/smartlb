@@ -12,7 +12,7 @@ ERL = erl -noshell -boot start_sasl
 MODS = lb lb_sup proxy trait config 
 
 all: compile
-	${ERL} -s lb start
+	${ERL} -config sys -s lb start
 	
 compile: ${MODS:%=%.beam}
 

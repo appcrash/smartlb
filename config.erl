@@ -8,7 +8,7 @@ init(_Args) ->
   {ok,[]}.
 
 start_link() ->
-  io:format("config server starting ~n"),
+  logger:info("config server starting ~n"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 
@@ -34,7 +34,7 @@ read_config() ->
         _ -> error
       end;
     {error,Reason} ->
-      io:format("read config file error: ~p~n",[Reason]),
+      logger:error("read config file error: ~p~n",[Reason]),
       error
   end.
 
@@ -51,7 +51,7 @@ check_config([H|T]) ->
 
   case Re of
     {error,Reason} ->
-      io:format("check config item error: ~p~n",[Reason]),
+      logger:error("check config item error: ~p~n",[Reason]),
       error;
     ok -> check_config(T)
   end;

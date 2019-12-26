@@ -10,10 +10,10 @@ start() ->
   % timer:sleep(1000),
   case config:get_config() of
     {ok,Config} ->
-      io:format("######~n ~p~n######~n",[Config]),
+      logger:info("######~n ~p~n######~n",[Config]),
       ok;
     error ->
-      io:format("config error, shutdown ... ~n"),
+      logger:error("config error, shutdown ... ~n"),
       exit(shutdown)
   end,
 
@@ -21,8 +21,8 @@ start() ->
 
 loop() ->
   receive
-    {'EXIT',Reason,_} -> io:format("lb got exit with reason: ~p~n",[Reason]);
-    _ -> io:format("lb got unknown message~n")
+    {'EXIT',Reason,_} -> logger:error("lb got exit with reason: ~p~n",[Reason]);
+    _ -> logger:info("lb got unknown message~n")
   end,
   loop().
 

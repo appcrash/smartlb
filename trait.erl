@@ -30,12 +30,12 @@ init(_Args) ->
   {ok,S}.
 
 start_link() ->
-  io:format("trait server starting ~n"),
+  logger:info("trait server starting ~n"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 % match one by one, first matched one wins
 handle_call({route,Data},_From,State = #match_state{matcher_list = ML}) ->
-  % io:format("ML:  ~p",[ML]),
+  % logger:info("ML:  ~p",[ML]),
   S = byte_size(Data),
   Matched = lists:search(fun(M) ->
     case M of
