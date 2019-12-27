@@ -40,7 +40,6 @@ read_config() ->
 
 
 % check config return ok || error
-
 check_config([]) -> ok;
 check_config([H|T]) ->
   Re = case H of
