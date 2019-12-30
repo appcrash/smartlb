@@ -5,7 +5,7 @@
 
 -include("common.hrl").
 
--define(INIT_PACKET_THRESHOLD,64).
+-define(INIT_PACKET_THRESHOLD,8).
 
 
 init(_Args) ->

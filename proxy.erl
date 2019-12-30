@@ -3,8 +3,8 @@
 
 -export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3,terminate/2]).
 
--define(TCP_OPTIONS, [binary, {packet, 0}, {active, false},
- {reuseaddr, true}, {nodelay, true}]).
+-define(TCP_LISTEN_OPTIONS, [binary, {packet, 0}, {active, false},
+ {reuseaddr, true}, {nodelay, true},{backlog,65535}]).
 -define(TCP_CONN_OPTIONS,[binary, {packet, 0}, {active, false},
  {reuseaddr, true}, {nodelay, true}]).
 -define(SRC_PORT,7777).
@@ -25,7 +25,7 @@ start_link() ->
 init(State) ->
   process_flag(trap_exit,true),
   #server_state{port = Port} = State,
-  case gen_tcp:listen(Port,?TCP_OPTIONS) of
+  case gen_tcp:listen(Port,?TCP_LISTEN_OPTIONS) of
       {ok, Listen_Socket} ->
           NewState = State#server_state{listen_socket = Listen_Socket},
           prefork(?PREFORK,Listen_Socket),
