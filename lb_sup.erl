@@ -29,6 +29,13 @@ init(_) ->
         5000,
         worker,
         [proxy]
+      },
+      {metric,
+        {metric,start_link,[]},
+        permanent,
+        5000,
+        worker,
+        [metric]
       }
 
     ]

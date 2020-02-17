@@ -10,7 +10,7 @@ ERL_OPTION = +P 1048576 +Q 1048576 -noshell -boot start_sasl
 ERL = erl ${ERL_OPTION}
 
 
-MODS = lb lb_sup proxy trait config 
+MODS = lb lb_sup proxy trait config metric
 
 all: compile
 	${ERL} -config sys -s lb start

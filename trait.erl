@@ -28,11 +28,11 @@ init(_Args) ->
 
   Table = ets:new(mst,[set]),
   lists:foreach(fun(K) ->
-    Addr = case K of
+    Address = case K of
       #matcher{addr = Addr} -> Addr;
       #default_matcher{addr = Addr} -> Addr
     end,
-    ets:insert(Table,{K,#matcher_state{backend_number = length(Addr)}})    % create matcher -> matcher_state mapping
+    ets:insert(Table,{K,#matcher_state{backend_number = length(Address)}})    % create matcher -> matcher_state mapping
   end,ML),
 
   S = #trait_state{matcher_list = ML, matcher_state_table = Table},
@@ -95,4 +95,3 @@ select_backend_addr(Matcher,Matcher_State) ->
     #matcher{addr = Addr} -> lists:nth(Chosen,Addr);
     #default_matcher{addr = Addr} -> lists:nth(Chosen,Addr)
   end.
-
