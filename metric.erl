@@ -6,7 +6,11 @@
 -include("common.hrl").
 
 init(_Args) ->
-  {ok, #metric_state{}}.
+  {ok, #{
+    incoming_conn => 0,
+    incoming_conn_fail => 0
+  }}.
+
 
 
 start_link() ->
@@ -15,12 +19,12 @@ start_link() ->
 
 handle_cast(Event,State) ->
   NewState = case Event of
-    incoming_conn ->
-      #metric_state{incoming_conn_total_number = N} = State,
-      State#metric_state{incoming_conn_total_number = N + 1};
-    incoming_conn_fail ->
-      #metric_state{incoming_conn_failed_number = N} = State,
-      State#metric_state{incoming_conn_failed_number = N + 1};
+    {count,Key} ->
+      try maps:update_with(Key,fun(V) -> V + 1 end,State)
+      catch
+	error:{badkey,K} -> logger:error("metric server count a wrong key ~p~n",[K]),State;
+	_:_ -> logger:error("metric server got a unknown exception"),State
+      end;
     _ -> State
   end,
   {noreply,NewState}.
@@ -32,7 +36,7 @@ code_change(_OldVersion, Library, _Extra) -> {ok, Library}.
 
 
 event(Event) ->
-  gen_server:cast(?MODULE,Event).
+  gen_server:cast(?MODULE,{count,Event}).
 
 get_metric_data() ->
   gen_server:call(?MODULE,data).

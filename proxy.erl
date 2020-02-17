@@ -63,6 +63,8 @@ accept(Listen_Socket) ->
   % logger:info("new proxy accept process~n"),
   A = gen_tcp:accept(Listen_Socket),
   gen_server:call(?MODULE,accepted),
+  %% metric:event(incoming_conn),
+  %% logger:info("metric data is ~p~n",[metric:get_metric_data()]),
   case A of
     {ok,Socket} -> process_socket(Socket);
     {error,Reason} -> logger:error("accept error ~p~n",[Reason])

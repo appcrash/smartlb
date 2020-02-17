@@ -18,8 +18,3 @@
   matcher_list,
   matcher_state_table
 }).
-
--record(metric_state,{
-  incoming_conn_total_number = 0,
-  incoming_conn_failed_number = 0
-}).
