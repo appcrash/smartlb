@@ -1,23 +1,27 @@
 -module(lb).
--behaviour(supervisor).
+%-behaviour(supervisor).
+-behaviour(application).
 
+-export([init/1,start/2,stop/1]).
 
--export([init/1,start/0]).
-
-start() ->
+start(_Type,_StartArgs) ->
   % process_flag(trap_exit,true),
-  supervisor:start_link({local,?MODULE},?MODULE,[]),
+  % supervisor:start_link({local,?MODULE},?MODULE,[]),
+  {ok,Pid} = lb_sup:start_link(),
   % timer:sleep(1000),
   case config:get_config() of
     {ok,Config} ->
       logger:info("######~n ~p~n######~n",[Config]),
-      ok;
+      {ok,Pid};
     error ->
       logger:error("config error, shutdown ... ~n"),
       exit(shutdown)
-  end,
+  end.
 
-  loop().
+  %loop().
+
+stop(_State) ->
+  ok.
 
 loop() ->
   receive

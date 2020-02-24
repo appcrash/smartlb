@@ -5,12 +5,14 @@
 
 -include("common.hrl").
 
+
+%% use metric:event(EventName) to increase the metric in the server state
 init(_Args) ->
   {ok, #{
     incoming_conn => 0,
-    incoming_conn_fail => 0
+    incoming_conn_fail => 0,
+    analyze_trait_timeout => 0
   }}.
-
 
 
 start_link() ->

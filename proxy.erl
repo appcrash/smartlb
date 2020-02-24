@@ -7,7 +7,7 @@
  {reuseaddr, true}, {nodelay, true},{backlog,65535}]).
 -define(TCP_CONN_OPTIONS,[binary, {packet, 0}, {active, false},
  {reuseaddr, true}, {nodelay, true}]).
--define(SRC_PORT,7777).
+-define(SRC_PORT,10080).
 -define(PREFORK,1).
 
 -record(server_state,{
@@ -18,7 +18,14 @@
 
 start_link() ->
   logger:info("proxy server starting ~n"),
-  State = #server_state{port = ?SRC_PORT},
+  Port = case application:get_env(port) of
+    {ok,P} when is_integer(P) ->
+      logger:info("port is overridden to ~p~n",[P]),
+      P;
+    _ -> ?SRC_PORT
+  end,
+
+  State = #server_state{port = Port},
   gen_server:start_link({local,?MODULE},?MODULE,State,[]).
 
 
@@ -63,8 +70,8 @@ accept(Listen_Socket) ->
   % logger:info("new proxy accept process~n"),
   A = gen_tcp:accept(Listen_Socket),
   gen_server:call(?MODULE,accepted),
-  %% metric:event(incoming_conn),
-  %% logger:info("metric data is ~p~n",[metric:get_metric_data()]),
+  metric:event(incoming_conn),
+  %logger:info("metric data is ~p~n",[metric:get_metric_data()]),
   case A of
     {ok,Socket} -> process_socket(Socket);
     {error,Reason} -> logger:error("accept error ~p~n",[Reason])
@@ -76,6 +83,7 @@ process_socket(Socket) ->
   case analyze_trait(Socket,<<>>) of
     error ->
       logger:info("socket stream has no trait, close it ~n"),
+      metric:event(incoming_conn_fail),
       gen_tcp:close(Socket);
     {ok,{Ip,Port},Buffered_Packet} ->
       % logger:info("selected: ~p:~p~n",[Ip,Port]),
@@ -146,6 +154,7 @@ analyze_trait(Socket,Data) ->
         {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
         {error,timeout} ->
           logger:info("incoming connection has not enough data within timeout value, close the socket~n"),
+	  metric:event(analyze_trait_timeout),
           error;
         {error,_Reason} -> error
       end;
