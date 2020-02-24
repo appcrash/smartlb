@@ -2,7 +2,7 @@
 
 It is a simple tcp proxy that proxying tcp stream by incoming connection trait.
 
-The trait can be anything from information from socket, packet, like:
+The trait can be anything from properties of socket/packet, like:
   - source ip
   - initial packet content by regex matching
   - ......
