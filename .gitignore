@@ -1,8 +1,25 @@
 *.dump
 *.beam
 target/*
+log/
 
 lb.conf
 
+.rebar3
+_*
+.eunit
+*.o
+*.plt
+*.swp
+*.swo
+.erlang.cookie
+ebin
+erl_crash.dump
+.rebar
+_build
+.idea
+*.iml
+rebar3.crashdump
+*~
 
 

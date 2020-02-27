@@ -1,0 +1,8 @@
+-sname smartlb
+
+-setcookie smartlb_cookie
+
++P 1048576
++Q 1048576 
++K true
++A30

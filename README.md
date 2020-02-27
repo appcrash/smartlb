@@ -1,4 +1,4 @@
-# What is smart-lb
+# What is smartlb
 
 It is a simple tcp proxy that proxying tcp stream by incoming connection trait.
 
