@@ -16,5 +16,5 @@ deploy:
   file:
     - _build/default/rel/smartlb/*.tar.gz
   on:
-    tags: false
+    tags: true
     repo: appcrash/smartlb
