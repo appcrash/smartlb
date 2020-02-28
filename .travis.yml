@@ -3,7 +3,6 @@ language: erlang
 notifications:
   email: false
 otp_release:
-  - 22.0
   - 21.3
 
 before_deploy:
@@ -17,5 +16,5 @@ deploy:
   file:
     - _build/default/rel/smartlb/*.tar.gz
   on:
-    tags: true
+    tags: false
     repo: appcrash/smartlb
