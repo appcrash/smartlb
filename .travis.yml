@@ -1,0 +1,21 @@
+sudo: false
+language: erlang
+notifications:
+  email: false
+otp_release:
+  - 22.0
+  - 21.3
+
+before_deploy:
+  - rebar3 tar
+
+deploy:
+  provider: releases
+  api_key:
+    secure: cxBwLBIxAgEupfy3zX6+xUj/43lfPc5WU4GoSgne3AVxWfocL1UhyneDOAXo3eJ2CWxFNUTfH9jDbc3FZ6TBvsnCFXJmXGSiUBwWMg+xX2Ilu1SSkPMdePnwfjMhqhE8aCPE/QYAgbsUH0TKgw2RLUKES7zlLiUlHQ0cl/aG7CSgvfut6i9RsJA6TUd8Kc/dTclgCxX4Axx+jG/t3JfDSqLDzgv2fDPoAeIVSud38q23pryOiY0XtiZsHzdW63s4JeVazKpZLZKRyEX/mtV93+g9c3DGsk+brPlRa3WZ5sjfWNk9RAW0x+mqvElfl0lDylFnvsGumKYl/6luk7ah1eYpAaPaA8V8s4MP7TjNh2KCNKwyM5VEVZbbX7kqnODV1HZx+UJrnoXR5ANr+c2MEFQKLMOd30lBeZizzlhicqJMO9a8vMKhd4yQPBjepdT6Wdix5iE7xPh9bkXhYJ0Eot8tG/llnV7NJiaay4VIPdSKwKCOF9CJYtPJ3DYrZl9pZMg90jAnwhfKUY5Maim6rwP8B3BSviWyOfUY3NqyqgZ2AjZg5P/13DIdWlrnMPpP6ZxbJVJ21uhIM5kuN1zGNkFjZ6gDia67EwSJVnDUHYmmVcq4PS5aUS18sZPEwI/Muliqr/JM2W4Fqj0n5x9CvB8v8FpVVQpRyGnKoSba1mU=
+  skip_cleanup: true
+  file:
+    - _build/default/rel/smartlb/*.tar.gz
+  on:
+    tags: true
+    repo: appcrash/smartlb
