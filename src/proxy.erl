@@ -3,12 +3,13 @@
 
 -export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3,terminate/2]).
 
+-include("common.hrl").
+
 -define(TCP_LISTEN_OPTIONS, [binary, {packet, 0}, {active, false},
  {reuseaddr, true}, {nodelay, true},{backlog,65535}]).
 -define(TCP_CONN_OPTIONS,[binary, {packet, 0}, {active, false},
  {reuseaddr, true}, {nodelay, true}]).
--define(SRC_PORT,10080).
--define(PREFORK,1).
+
 
 -record(server_state,{
   port,
@@ -18,13 +19,8 @@
 
 start_link() ->
   logger:info("proxy server starting ~n"),
-  Port = case application:get_env(port) of
-    {ok,P} when is_integer(P) ->
-      logger:info("port is overridden to ~p~n",[P]),
-      P;
-    _ -> ?SRC_PORT
-  end,
 
+  Port = utils:get_config(port,?SRC_PORT),
   State = #server_state{port = Port},
   gen_server:start_link({local,?MODULE},?MODULE,State,[]).
 

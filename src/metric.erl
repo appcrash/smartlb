@@ -8,6 +8,7 @@
 
 %% use metric:event(EventName) to increase the metric in the server state
 init(_Args) ->
+  init_http(),
   {ok, #{
     incoming_conn => 0,
     incoming_conn_fail => 0,
@@ -15,8 +16,18 @@ init(_Args) ->
   }}.
 
 
+init_http() ->
+  Port = utils:get_config(metric_http_port,?METRIC_HTTP_PORT),
+  Dispatch = cowboy_router:compile([
+				    {'_', [{"/metric", metric_handler, []}]}
+				   ]),
+  cowboy:start_clear(metric_http_listener,
+			       [{port, Port}],
+			       #{env => #{dispatch => Dispatch}}
+			      ).
+
 start_link() ->
-  logger:info("metric server starting ~n"),
+  logger:info("metric server starting"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 handle_cast(Event,State) ->

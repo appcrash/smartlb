@@ -18,3 +18,8 @@
   matcher_list,
   matcher_state_table
 }).
+
+
+-define(SRC_PORT,10080).
+-define(METRIC_HTTP_PORT,10090).
+-define(PREFORK,1).
