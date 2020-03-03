@@ -35,7 +35,7 @@ handle_cast(Event,State) ->
     {count,Key} ->
       try maps:update_with(Key,fun(V) -> V + 1 end,State)
       catch
-	error:{badkey,K} -> logger:error("metric server count a wrong key ~p~n",[K]),State;
+	error:{badkey,K} -> logger:error("metric server count a wrong key ~p",[K]),State;
 	_:_ -> logger:error("metric server got a unknown exception"),State
       end;
     _ -> State

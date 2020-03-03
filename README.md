@@ -1,3 +1,7 @@
+![build status][1]
+
+[1]: https://www.travis-ci.org/appcrash/smartlb.svg?branch=master
+
 # What is smartlb
 
 It is a simple tcp proxy that proxying tcp stream by incoming connection trait.
