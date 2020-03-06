@@ -44,7 +44,7 @@ check_config([]) -> ok;
 check_config([H|T]) ->
   Re = case H of
     {matcher,MP,Keyword,Backend} -> check_item_matcher({MP,Keyword,Backend});
-    {default_matcher,Timeout,Backend} -> check_item_matcher_backend(Backend);
+    {default_matcher,_Timeout,Backend} -> check_item_matcher_backend(Backend);
     Any -> {error,Any}
   end,
 
