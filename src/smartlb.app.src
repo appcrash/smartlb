@@ -2,6 +2,6 @@
  [{description, "Smart Load Balancer"},
   {vsn, "1.0"},
   {modules, []},
-  {applications, [kernel,stdlib,sasl,cowboy]},
+  {applications, [kernel,stdlib,sasl,cowboy,jsone]},
   {mod, {lb,[]}}
 ]}.

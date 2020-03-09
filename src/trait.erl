@@ -39,7 +39,7 @@ init(_Args) ->
   {ok,S}.
 
 start_link() ->
-  logger:info("trait server starting ~n"),
+  logger:info("trait server starting"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 % match one by one, first matched one wins
@@ -63,11 +63,11 @@ handle_call({route,Data},_From,State = #trait_state{matcher_list = ML,matcher_st
   case Matched of
     {value,M = #matcher{}} ->
       Addr = select_backend_addr(M,MST),
-      % logger:info("select addr :~p~n",[Addr]),
+      % logger:info("select addr :~p",[Addr]),
       {reply,{match,Addr},State};
     {value,M = #default_matcher{}} when S > ?INIT_PACKET_THRESHOLD ->
       Addr = select_backend_addr(M,MST),
-      % logger:info("select addr :~p~n",[Addr]),
+      % logger:info("select addr :~p",[Addr]),
       {reply,{match,Addr},State}; % enough inital data to select the default matcher
     {value,#default_matcher{timeout = Timeout}} -> {reply,{again,Timeout},State}; % initial data is not enough, wait no more than Timeout
     false -> {reply,no_match,State}

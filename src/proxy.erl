@@ -18,7 +18,7 @@
 
 
 start_link() ->
-  logger:info("proxy server starting ~n"),
+  logger:info("proxy server starting"),
 
   Port = utils:get_config(port,?SRC_PORT),
   State = #server_state{port = Port},
@@ -35,13 +35,13 @@ init(State) ->
           {ok, NewState};
 
       {error, Reason} ->
-        logger:error("proxy can not create listen socket: ~p~n",[Reason]),
+        logger:error("proxy can not create listen socket: ~p",[Reason]),
         {stop, Reason}
   end.
 
 
 terminate(Reason,_State = #server_state{listen_socket = LS}) ->
-  logger:error("proxy terminate: ~p~n",[Reason]),
+  logger:error("proxy terminate: ~p",[Reason]),
   gen_tcp:close(LS).
 
 code_change(_OldVersion, Library, _Extra) -> {ok, Library}.
@@ -63,14 +63,14 @@ prefork(Remaining,LS) ->
 
 
 accept(Listen_Socket) ->
-  % logger:info("new proxy accept process~n"),
+  % logger:info("new proxy accept process"),
   A = gen_tcp:accept(Listen_Socket),
   gen_server:call(?MODULE,accepted),
   metric:event(incoming_conn),
   %logger:info("metric data is ~p~n",[metric:get_metric_data()]),
   case A of
     {ok,Socket} -> process_socket(Socket);
-    {error,Reason} -> logger:error("accept error ~p~n",[Reason])
+    {error,Reason} -> logger:error("accept error ~p",[Reason])
   end.
 
 
@@ -78,11 +78,11 @@ process_socket(Socket) ->
   inet:setopts(Socket,[{nopush, false}]),
   case analyze_trait(Socket,<<>>) of
     error ->
-      logger:info("socket stream has no trait, close it ~n"),
+      logger:info("socket stream has no trait, close it"),
       metric:event(incoming_conn_fail),
       gen_tcp:close(Socket);
     {ok,{Ip,Port},Buffered_Packet} ->
-      % logger:info("selected: ~p:~p~n",[Ip,Port]),
+      % logger:info("selected: ~p:~p",[Ip,Port]),
       % logger:info("~p~n^^^^send buffered data^^^~n",[binary_to_list(Buffered_Packet)]),
       case gen_tcp:connect(Ip,Port,?TCP_CONN_OPTIONS) of
         {ok,To_Socket} ->
@@ -96,7 +96,7 @@ process_socket(Socket) ->
           P2 ! {ready_buffered,P1,Buffered_Packet};  % send buffered packet to destination when connected
 
         {error,Reason} ->
-          logger:error("connect dest ip with error ~p~n",[Reason]),
+          logger:error("connect dest ip with error ~p",[Reason]),
           gen_tcp:close(Socket)
       end
   end.
@@ -122,12 +122,12 @@ socket_loop(Socket,Pid) ->
       Pid ! {peer_closed};
 
     {tcp_error, _Socket, Reason} ->
-      logger:error("tcp error with reason: ~p~n",[Reason]),
+      logger:error("tcp error with reason: ~p",[Reason]),
       gen_tcp:close(Socket),
       Pid ! {peer_closed};
 
     {send,Packet} ->
-      % logger:info("~p~n^^^^^send data^^^^^~n",[binary_to_list(Packet)]),
+      % logger:info("~p~n^^^^^send data^^^^^",[binary_to_list(Packet)]),
       gen_tcp:send(Socket,Packet),
       socket_loop(Socket,Pid);
 
@@ -142,14 +142,14 @@ analyze_trait(Socket,<<>>) ->
     {error,_} -> error
   end;
 analyze_trait(Socket,Data) ->
-  % logger:info("analyzing:~n~p~n^^^^analyzed^^^^n",[binary_to_list(Data)]),
+  % logger:info("analyzing:~n~p~n^^^^analyzed^^^^",[binary_to_list(Data)]),
   case trait:analyze(Data) of
     {match,Addr} -> {ok,Addr,Data};
     {again,Timeout} ->
       case gen_tcp:recv(Socket,0,Timeout) of
         {ok,Packet} -> analyze_trait(Socket,<<Data/binary,Packet/binary>>);
         {error,timeout} ->
-          logger:info("incoming connection has not enough data within timeout value, close the socket~n"),
+          logger:info("incoming connection has not enough data within timeout value, close the socket"),
 	  metric:event(analyze_trait_timeout),
           error;
         {error,_Reason} -> error
