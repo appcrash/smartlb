@@ -43,4 +43,4 @@ It will search "Host" header in the first 512 bytes of every incoming connection
 Following variables can be overridden by sys.config file for application **lb**.
   
   - port(integer): the proxy listening port, default is 10080
-  
+  - metric_http_port(integer): the http port to receive metric data
