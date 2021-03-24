@@ -1,12 +1,10 @@
 -module(lb).
-%-behaviour(supervisor).
 -behaviour(application).
 
 -export([init/1,start/2,stop/1]).
 
 start(_Type,_StartArgs) ->
   % process_flag(trap_exit,true),
-  % supervisor:start_link({local,?MODULE},?MODULE,[]),
   {ok,Pid} = lb_sup:start_link(),
   % timer:sleep(1000),
   case config:get_config() of

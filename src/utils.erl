@@ -5,7 +5,7 @@
 get_config(Key,DefaultValue) ->
     case application:get_env(Key) of
       {ok,P} ->
-	logger:info("key(~p)'s default value is ~p, now is ~p~n",[Key,DefaultValue,P]),
+	logger:info("key(~p)'s default value is ~p, now is ~p",[Key,DefaultValue,P]),
 	P;
       _ -> DefaultValue
     end.

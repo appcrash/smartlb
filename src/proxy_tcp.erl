@@ -1,4 +1,4 @@
--module(proxy).
+-module(proxy_tcp).
 -behaviour(gen_server).
 
 -export([start_link/0,init/1,handle_cast/2,handle_call/3,code_change/3,terminate/2]).
@@ -18,9 +18,9 @@
 
 
 start_link() ->
-  logger:info("proxy server starting"),
+  logger:info("tcp proxy server starting"),
 
-  Port = utils:get_config(port,?SRC_PORT),
+  Port = utils:get_config(tcp_port,?TCP_SRC_PORT),
   State = #server_state{port = Port},
   gen_server:start_link({local,?MODULE},?MODULE,State,[]).
 
@@ -82,8 +82,6 @@ process_socket(Socket) ->
       metric:event(incoming_conn_fail),
       gen_tcp:close(Socket);
     {ok,{Ip,Port},Buffered_Packet} ->
-      % logger:info("selected: ~p:~p",[Ip,Port]),
-      % logger:info("~p~n^^^^send buffered data^^^~n",[binary_to_list(Buffered_Packet)]),
       case gen_tcp:connect(Ip,Port,?TCP_CONN_OPTIONS) of
         {ok,To_Socket} ->
           P1 = spawn(fun() -> socket_loop(Socket) end),
@@ -127,7 +125,6 @@ socket_loop(Socket,Pid) ->
       Pid ! {peer_closed};
 
     {send,Packet} ->
-      % logger:info("~p~n^^^^^send data^^^^^",[binary_to_list(Packet)]),
       gen_tcp:send(Socket,Packet),
       socket_loop(Socket,Pid);
 
@@ -142,7 +139,6 @@ analyze_trait(Socket,<<>>) ->
     {error,_} -> error
   end;
 analyze_trait(Socket,Data) ->
-  % logger:info("analyzing:~n~p~n^^^^analyzed^^^^",[binary_to_list(Data)]),
   case trait:analyze(Data) of
     {match,Addr} -> {ok,Addr,Data};
     {again,Timeout} ->

@@ -1,7 +1,7 @@
 *.dump
 *.beam
 target/*
-log/
+log*/
 
 lb.conf
 

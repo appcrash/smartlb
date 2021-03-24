@@ -23,12 +23,12 @@ init(_) ->
         worker,      % type
         [trait]      % release handling
       },
-      {proxy,
-        {proxy,start_link,[]},
+      {proxy_tcp,
+        {proxy_tcp,start_link,[]},
         permanent,
         5000,
         worker,
-        [proxy]
+        [proxy_tcp]
       },
       {metric,
         {metric,start_link,[]},
@@ -36,6 +36,13 @@ init(_) ->
         5000,
         worker,
         [metric]
+      },
+      {proxy_udp_sup,
+        {proxy_udp_sup,start_link,[]},
+        permanent,
+        5000,
+        supervisor,
+        [proxy_udp_sup]
       }
 
     ]
