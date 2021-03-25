@@ -30,20 +30,21 @@ init(_) ->
         worker,
         [proxy_tcp]
       },
-      {metric,
-        {metric,start_link,[]},
-        permanent,
-        5000,
-        worker,
-        [metric]
-      },
       {proxy_udp_sup,
         {proxy_udp_sup,start_link,[]},
         permanent,
         5000,
         supervisor,
         [proxy_udp_sup]
+      },
+      {metric,
+        {metric,start_link,[]},
+        permanent,
+        5000,
+        worker,
+        [metric]
       }
+
 
     ]
   }}.

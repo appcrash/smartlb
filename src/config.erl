@@ -8,7 +8,7 @@ init(_Args) ->
   {ok,[]}.
 
 start_link() ->
-  logger:info("config server starting ~n"),
+  logger:info("config server starting"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 
@@ -34,7 +34,7 @@ read_config() ->
         _ -> error
       end;
     {error,Reason} ->
-      logger:error("read config file error: ~p~n",[Reason]),
+      logger:error("read config file error: ~p",[Reason]),
       error
   end.
 

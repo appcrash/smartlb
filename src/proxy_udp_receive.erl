@@ -9,6 +9,7 @@
 %% simple udp receiving loop which is supervised
 %% receive as quickly as process can to avoid socket buffer running out
 start_link() ->
+  proxy_udp_forward:start_link(),
   Pid = spawn_link(fun() -> receive_udp() end),
   {ok,Pid}.
 
@@ -23,7 +24,6 @@ receive_udp() ->
       logger:error("proxy udp receiver: wrong listen address, use default(listen to all address)"),
       UdpOption = ?UDP_LISTEN_OPTIONS
   end,
-  logger:info("...~p",[UdpOption]),
 
   case gen_udp:open(Port,UdpOption) of
     {ok, Socket} ->

@@ -10,7 +10,7 @@ start_link() ->
 init(_Args) ->
   SupFlags = #{strategy => one_for_one,
 	      intensity => 1,
-	      period => 2},
+	      period => 5},
   ChildSpecs = [
     #{id => proxy_udp_receive,
       start => {proxy_udp_receive, start_link, []},
