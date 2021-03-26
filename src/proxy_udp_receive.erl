@@ -35,8 +35,7 @@ receive_udp() ->
 loop(Socket) ->
   case gen_udp:recv(Socket,0) of
     {ok,Data} ->
-      logger:info("receive ok...~p",[Data]);
-      %proxy_udp_forward:handle(Data);
+      proxy_udp_forward:forward(Data);
     {error, Reason} ->
       logger:error("udp proxy receiver error: ~p",[Reason])
   end,

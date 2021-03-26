@@ -1,6 +1,7 @@
 -module(utils).
 
 -export([get_config/2]).
+-export([bit_format/1]).
 
 get_config(Key,DefaultValue) ->
     case application:get_env(Key) of
