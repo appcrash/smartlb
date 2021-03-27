@@ -47,8 +47,8 @@ handle_cast(stop,State) ->
   {stop,normal,State}.
 
 terminate(Reason, _State = #server_state{rawsocket = Socket}) ->
-  logger:error("udp proxy forwarder terminated ~p",[Reason]).
-  %procket:close(Socket).
+  logger:error("udp proxy forwarder terminated ~p",[Reason]),
+  socket:close(Socket).
 
 % forward Data collected by gen_udp
 forward(Data) ->
@@ -57,19 +57,11 @@ forward(Data) ->
 prepare_raw_socket() ->
   case os:type() of
       {unix,linux} ->
-        %procket:socket(inet,raw,raw);
-        socket:open(inet,raw,raw);
+        socket:open(inet,raw,{raw,255});         % IPPROTO_RAW: 255
       {unix,freebsd} ->
-        %% case procket:socket(inet,raw,17) of
-	%%   {ok,Socket} ->
-	%%     procket:setsockopt(Socket,0,2,<<1:32/native>>),
-	%%     {ok,Socket};
-	%%   R -> R
-	%% end
         case socket:open(inet,raw,{raw,17}) of   % IPPROTO_UDP: 17
 	  {ok,Socket} ->
-            R = socket:setopt(Socket,0,2,<<1:32>>),
-	    logger:info("^^^^^^^^^^^ ~p",[R]),
+            socket:setopt(Socket,0,2,<<1:32>>),  % IPPROTO_IP:0, IP_HDRINCL:2
 	    {ok,Socket};
 	  R -> R
 	end
@@ -80,24 +72,15 @@ prepare_raw_socket() ->
 send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Payload) ->
   SipBin = list_to_binary(tuple_to_list(Sip)),
   DipBin = list_to_binary(tuple_to_list(Dip)),
-  % procket sendto need sa_addr as binary, which is not portable :(
-  % tested: linux/freebsd
-  SA = << 2:16/native,    % sin_family, inet
-	  0:16/big,       % sin_port, for raw socket set to zero,
-	  DipBin/binary,  % sin_addr
-	  0:64 >>,        % padding
   UdpHdrAndPayload = <<0:64,Payload/binary>>, % prepend fake udp header(8 bytes) just to calc fragments
   TotalUdpLength = byte_size(UdpHdrAndPayload),
   lists:foreach(fun({Flag,Offset,P}) ->
 	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,P),
-	      logger:info("***** ~p  ~p ",[Flag,Offset]),
-	      %R = procket:sendto(RawSocket,UdpPacket,0,SA),
-
-	      R = socket:sendto(RawSocket,UdpPacket,
+	      %logger:info("***** ~p  ~p ",[Flag,Offset]),
+	      socket:sendto(RawSocket,UdpPacket,
 			       #{family => inet,
 				addr => Dip,
-				port => Dport}),
-	      logger:info("@@@@@@@@@@ ~p",[R])
+				port => Dport})
 	  end,fragment(UdpHdrAndPayload)).
 
 fragment(Payload) -> fragment(Payload,0,[]).
@@ -175,6 +158,6 @@ can_ip_offload() ->
   case os:type() of
     {unix,linux}  -> % linux raw socket would always fill ip checksum and length if IP_HDRINCL enabled(IPPROTO_RAW implies)
       true;
-    {unix,freebsd} -> false;
+    {unix,freebsd} -> true;
     _ -> false
   end.
