@@ -8,7 +8,7 @@
 
 -define(UDP_PROTOCOL,17).
 -define(IP_TTL,60).
--define(UDP_PAYLOAD_MTU,1472). % 1500(ethernet) - 20(ip_hdr)
+-define(UDP_MTU,1480). % 1500(ethernet) - 20(ip_hdr)
 
 
 %% this forwarder use raw socket so permission should be promoted
@@ -25,9 +25,10 @@ start_link() ->
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 init(_) ->
-  case procket:socket(inet,raw,raw) of
-    {ok,SocketFd} ->
-      State = #server_state{rawsocket = SocketFd,ip_ident = 1},
+  case prepare_raw_socket() of
+    {ok,Socket} ->
+      %R = socket:setopt(Socket,0,2,1),
+      State = #server_state{rawsocket = Socket,ip_ident = 1},
       {ok,State};
     {error,Reason} ->
       logger:error("udp proxy forwarder create raw socket error ~p",[Reason]),
@@ -46,87 +47,118 @@ handle_cast(stop,State) ->
   {stop,normal,State}.
 
 terminate(Reason, _State = #server_state{rawsocket = Socket}) ->
-  logger:error("udp proxy forwarder terminated ~p",[Reason]),
-  procket:close(Socket).
+  logger:error("udp proxy forwarder terminated ~p",[Reason]).
+  %procket:close(Socket).
 
 % forward Data collected by gen_udp
 forward(Data) ->
   gen_server:cast(?MODULE,{forward,Data}).
+
+prepare_raw_socket() ->
+  case os:type() of
+      {unix,linux} ->
+        procket:socket(inet,raw,raw);
+      {unix,freebsd} ->
+        case procket:socket(inet,raw,17) of
+	  {ok,Socket} ->
+	    procket:setsockopt(Socket,0,2,<<1:32/native>>),
+	    {ok,Socket};
+	  R -> R
+	end
+  end.
+
 
 -spec send_udp_packet(integer(),integer(),inet:ip4_address(),inet:ip4_address(),integer(),integer(),binary()) -> atom().
 send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Payload) ->
   SipBin = list_to_binary(tuple_to_list(Sip)),
   DipBin = list_to_binary(tuple_to_list(Dip)),
   % procket sendto need sa_addr as binary, which is not portable :(
-  % for linux only
+  % tested: linux/freebsd
   SA = << 2:16/native,    % sin_family, inet
 	  0:16/big,       % sin_port, for raw socket set to zero,
 	  DipBin/binary,  % sin_addr
 	  0:64 >>,        % padding
-  FragFlags = 16#4000,
+  UdpHdrAndPayload = <<0:64,Payload/binary>>, % fake udp header(8 bytes) used to calc fragment
+  TotalUdpLength = byte_size(UdpHdrAndPayload),
+  lists:foreach(fun({Flag,Offset,P}) ->
+	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,P),
+	      logger:info("***** ~p  ~p ",[Flag,Offset]),
+	      R = procket:sendto(RawSocket,UdpPacket,0,SA),
+	      logger:info("@@@@@@@@@@ ~p",[R])
 
-  UdpLength = byte_size(Payload) + 8, % udp header length(8)
-  UdpHdrAndPayload = <<SipBin:16/big,DipBin:16/big,UdpLength:16/big,0:16,Payload/binary>>,
-  Fragmented_Payload = fragment(UdpHdrAndPayload,0),
-  UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,FragFlags,Payload),
-  procket:sendto(RawSocket,UdpPacket,0,SA).
+	      %% R = socket:sendto(RawSocket,PP,
+	      %% 		       #{family => inet,
+	      %% 			addr => Dip,
+	      %% 			port => Dport}),
+	      %logger:info("############## ~p",[R]),
+	      %logger:info("############## ~p",[utils:bit_format(UdpPacket)])
+	  end,fragment(UdpHdrAndPayload)).
 
-fragment(Payload,Offset) -> fragment(Payload,Offset,[]).
-fragment(Payload,Offset,L) when byte_size(Payload) =< ?UDP_PAYLOAD_MTU ->
+fragment(Payload) -> fragment(Payload,0,[]).
+fragment(Payload,Offset,L) when byte_size(Payload) =< ?UDP_MTU ->
+  %logger:info("final packet ~p ~p",[Offset,byte_size(Payload)]),
   % final packet of the fragments, reverse it to keep first comes first
   if
-    Offset == 0 -> lists:reverse([{make_ip_frag(dont_frag,0),Payload} | L]);
-    true -> lists:reverse([{make_ip_frag(none,offset),Payload} | L])
+    Offset == 0 -> lists:reverse([{dont_frag,0,Payload} | L]); % no fragment at all
+    true -> lists:reverse([{last_frag,Offset,Payload} | L]) % last fragment
   end;
 fragment(Payload,Offset,L) ->
-  IncreasedOffset = ?UDP_PAYLOAD_MTU div 8,  % offset in unit of 8-bytes
+  IncreasedOffset = ?UDP_MTU div 8,  % offset in unit of 8-bytes
   Fragmented_Bytes = IncreasedOffset bsl 3,  % multiply 8 get consumed bytes
   NewOffset = Offset + IncreasedOffset,
+  %logger:info("fragment more ... ~p ~p ~p ",[IncreasedOffset,Fragmented_Bytes,NewOffset]),
+
   <<FragPayload:Fragmented_Bytes/binary-unit:8,Remain/binary >> = Payload,
-  fragment(Remain,NewOffset,[{make_ip_frag(more_frag,Offset),FragPayload},L]).
+  %logger:info("~p --------------- ~p",[byte_size(FragPayload),byte_size(Remain)]),
+  fragment(Remain,NewOffset,[{more_frag,Offset,FragPayload} | L]).
 
+udp_action(dont_frag,_) -> {calc_pseudo_header,<<16#4000:16>>};
+udp_action(more_frag,Offset) when Offset == 0 -> {calc_pseudo_header,<<16#2000:16>>}; % first fragment need udp header
+udp_action(more_frag,Offset) -> {only_payload,<<2#001:3,Offset:13/big>>};
+udp_action(last_frag,Offset) -> {only_payload,<<0:3,Offset:13/big>>}.
 
--spec make_ip_frag(atom(),integer()) -> binary().
-make_ip_frag(flag,offset) ->
-  case flag of
-    dont_frag -> << 2#100:3, offset:13/big >>;
-    more_frag -> << 2#010:3, offset:13/big >>;
-    _ -> << 0:3, offset:13/big >>
+-spec make_udp_packet(binary(),binary(),integer(),integer(),integer(),atom(),integer(),integer(),binary()) -> binary().
+make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,Payload) ->
+  PL = byte_size(Payload),
+  IpLength = byte_size(Payload) + 20, % ip header(20)
+  case udp_action(Flag,Offset) of
+    {calc_pseudo_header,FlagBin} -> % ip payload is udp header + udp payload(all or partial)
+      <<_:8/binary,RealPayload/binary>> = Payload,  % strip the fake udp header(8 bytes)
+      Udp = <<Sport:16/big, Dport:16/big,TotalUdpLength:16/big,0:16,RealPayload/binary>>,
+      Pseudo_Header =
+	if				% padding payload if needed
+	  PL rem 2 =:= 1 -> <<Sip/binary,Dip/binary,17:16/big,PL:16/big,Udp/binary,0:8>>;
+	  true -> <<Sip/binary,Dip/binary,17:16/big,PL:16/big,Udp/binary>>
+	end,
+						% calculate checksum with pseudo header or set it as 0 directly without any
+						% calculation, which means checksum isn't being used
+      Sum = checksum(Pseudo_Header),
+      IpHeader = make_ip_header(IpLength,Ident,FlagBin,?UDP_PROTOCOL,Sip,Dip),
+      %logger:info("calc pseudo header offset:~p ~p",[Offset,utils:bit_format(IpHeader)]),
+      <<IpHeader/binary, Sport:16/big, Dport:16/big, TotalUdpLength:16/big,
+	Sum:16/big,RealPayload/binary>>;
+    {only_payload,FlagBin} -> % ip payload is data(no udp header)
+      IpHeader = make_ip_header(IpLength,Ident,FlagBin,?UDP_PROTOCOL,Sip,Dip),
+      logger:info("only payload offset:~p ~p",[Offset,utils:bit_format(IpHeader)]),
+      <<IpHeader/binary,Payload/binary>>
   end.
-
--spec make_udp_packet(binary(),binary(),integer(),integer(),integer(),integer(),binary()) -> binary().
-make_udp_packet(Sip,Dip,Sport,Dport,Ident,FragFlags,Payload) ->
-  UdpLength = byte_size(Payload) + 8, % udp header length(8)
-  IpLength = UdpLength + 20,	      % ip header(20)
-  Udp = <<Sport:16/big, Dport:16/big,UdpLength:16/big,0:16,Payload/binary>>,
-  Pseudo_Header =
-    if				% padding payload if needed
-      UdpLength rem 2 =:= 1 -> <<Sip/binary,Dip/binary,17:16/big,UdpLength:16/big,Udp/binary,0:8>>;
-      true -> <<Sip/binary,Dip/binary,17:16/big,UdpLength:16/big,Udp/binary>>
-    end,
-  % calculate checksum with pseudo header or set it as 0 directly without any
-  % calculation, which means checksum isn't being used
-  Sum = checksum(Pseudo_Header),
-  IpHeader = make_ip_header(IpLength,Ident,FragFlags,?UDP_PROTOCOL,Sip,Dip),
-  <<IpHeader/binary, Sport:16/big, Dport:16/big, UdpLength:16/big,
-    Sum:16/big,Payload/binary>>.
 
 
 make_ip_header(Length,Id,Flags,Protocol,Sip,Dip) ->
   case can_ip_offload() of
     true -> Sum = 0;
     _ -> Sum = checksum(<<
-		       16#45:8, 16#00:8,     %version, ihl, dscp, ecn
-		       Length:16/big,
-		       Id:16/big,       % identification
-		       Flags:16/big,    % Fragment Flags
-		       ?IP_TTL:8,
-		       Protocol:8,
-		       0:16,            % checksum before calculation
-		       Sip/binary,
-		       Dip/binary >>)
+		       16#45:8, 16#00:8, % version, ihl, dscp, ecn        2-bytes
+		       Length:16/big,    % length                         2-bytes
+		       Id:16/big,        % identification                 2-bytes
+		       Flags/binary,     % fragment flags                 2-bytes
+		       ?IP_TTL:8,        % time to live                   1-byte
+		       Protocol:8,       % upper protocol                 1-byte
+		       0:16,             % checksum before calculation    2-bytes
+		       Sip/binary,       % source ip                      2-bytes
+		       Dip/binary >>)    % destination ip                 2-bytes
   end,
-  <<16#45:8,16#00:8,Length:16/big,Id:16/big,Flags:16/big,
+  <<16#45:8,16#00:8,Length:16/big,Id:16/big,Flags/binary,
     ?IP_TTL:8,Protocol:8,Sum:16/big,Sip/binary,Dip/binary >>.
 
 checksum(Sum) when is_integer(Sum) ->
@@ -139,7 +171,8 @@ checksum(Buf) ->  % Buf should be bitstring aligned to 16-bit, i.e. padding if n
 
 can_ip_offload() ->
   case os:type() of
-    {unix,Name} when Name == linux -> % linux raw socket would always fill ip checksum and length if IP_HDRINCL enabled(IPPROTO_RAW implies)
+    {unix,linux}  -> % linux raw socket would always fill ip checksum and length if IP_HDRINCL enabled(IPPROTO_RAW implies)
       true;
+    {unix,freebsd} -> false;
     _ -> false
   end.
