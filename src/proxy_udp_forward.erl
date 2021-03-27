@@ -15,6 +15,7 @@
 %% in linux, use following command:
 %% setcap cap_net_raw=ep `which beam.smp`
 %% to ensure erlang process can create raw socket
+%% in freebsd, root is required
 
 -record(server_state,{
   rawsocket,		% used to forward udp packet
@@ -27,7 +28,6 @@ start_link() ->
 init(_) ->
   case prepare_raw_socket() of
     {ok,Socket} ->
-      %R = socket:setopt(Socket,0,2,1),
       State = #server_state{rawsocket = Socket,ip_ident = 1},
       {ok,State};
     {error,Reason} ->
@@ -57,11 +57,19 @@ forward(Data) ->
 prepare_raw_socket() ->
   case os:type() of
       {unix,linux} ->
-        procket:socket(inet,raw,raw);
+        %procket:socket(inet,raw,raw);
+        socket:open(inet,raw,raw);
       {unix,freebsd} ->
-        case procket:socket(inet,raw,17) of
+        %% case procket:socket(inet,raw,17) of
+	%%   {ok,Socket} ->
+	%%     procket:setsockopt(Socket,0,2,<<1:32/native>>),
+	%%     {ok,Socket};
+	%%   R -> R
+	%% end
+        case socket:open(inet,raw,{raw,17}) of   % IPPROTO_UDP: 17
 	  {ok,Socket} ->
-	    procket:setsockopt(Socket,0,2,<<1:32/native>>),
+            R = socket:setopt(Socket,0,2,<<1:32>>),
+	    logger:info("^^^^^^^^^^^ ~p",[R]),
 	    {ok,Socket};
 	  R -> R
 	end
@@ -78,26 +86,23 @@ send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Payload) ->
 	  0:16/big,       % sin_port, for raw socket set to zero,
 	  DipBin/binary,  % sin_addr
 	  0:64 >>,        % padding
-  UdpHdrAndPayload = <<0:64,Payload/binary>>, % fake udp header(8 bytes) used to calc fragment
+  UdpHdrAndPayload = <<0:64,Payload/binary>>, % prepend fake udp header(8 bytes) just to calc fragments
   TotalUdpLength = byte_size(UdpHdrAndPayload),
   lists:foreach(fun({Flag,Offset,P}) ->
 	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,P),
 	      logger:info("***** ~p  ~p ",[Flag,Offset]),
-	      R = procket:sendto(RawSocket,UdpPacket,0,SA),
-	      logger:info("@@@@@@@@@@ ~p",[R])
+	      %R = procket:sendto(RawSocket,UdpPacket,0,SA),
 
-	      %% R = socket:sendto(RawSocket,PP,
-	      %% 		       #{family => inet,
-	      %% 			addr => Dip,
-	      %% 			port => Dport}),
-	      %logger:info("############## ~p",[R]),
-	      %logger:info("############## ~p",[utils:bit_format(UdpPacket)])
+	      R = socket:sendto(RawSocket,UdpPacket,
+			       #{family => inet,
+				addr => Dip,
+				port => Dport}),
+	      logger:info("@@@@@@@@@@ ~p",[R])
 	  end,fragment(UdpHdrAndPayload)).
 
 fragment(Payload) -> fragment(Payload,0,[]).
 fragment(Payload,Offset,L) when byte_size(Payload) =< ?UDP_MTU ->
-  %logger:info("final packet ~p ~p",[Offset,byte_size(Payload)]),
-  % final packet of the fragments, reverse it to keep first comes first
+  % final packet of the fragments, reverse it so that first comes first
   if
     Offset == 0 -> lists:reverse([{dont_frag,0,Payload} | L]); % no fragment at all
     true -> lists:reverse([{last_frag,Offset,Payload} | L]) % last fragment
@@ -106,11 +111,9 @@ fragment(Payload,Offset,L) ->
   IncreasedOffset = ?UDP_MTU div 8,  % offset in unit of 8-bytes
   Fragmented_Bytes = IncreasedOffset bsl 3,  % multiply 8 get consumed bytes
   NewOffset = Offset + IncreasedOffset,
-  %logger:info("fragment more ... ~p ~p ~p ",[IncreasedOffset,Fragmented_Bytes,NewOffset]),
-
-  <<FragPayload:Fragmented_Bytes/binary-unit:8,Remain/binary >> = Payload,
+  <<P:Fragmented_Bytes/binary-unit:8,Remain/binary >> = Payload,
   %logger:info("~p --------------- ~p",[byte_size(FragPayload),byte_size(Remain)]),
-  fragment(Remain,NewOffset,[{more_frag,Offset,FragPayload} | L]).
+  fragment(Remain,NewOffset,[{more_frag,Offset,P} | L]).
 
 udp_action(dont_frag,_) -> {calc_pseudo_header,<<16#4000:16>>};
 udp_action(more_frag,Offset) when Offset == 0 -> {calc_pseudo_header,<<16#2000:16>>}; % first fragment need udp header
@@ -139,7 +142,6 @@ make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,Payload) ->
 	Sum:16/big,RealPayload/binary>>;
     {only_payload,FlagBin} -> % ip payload is data(no udp header)
       IpHeader = make_ip_header(IpLength,Ident,FlagBin,?UDP_PROTOCOL,Sip,Dip),
-      logger:info("only payload offset:~p ~p",[Offset,utils:bit_format(IpHeader)]),
       <<IpHeader/binary,Payload/binary>>
   end.
 
