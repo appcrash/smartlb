@@ -6,7 +6,7 @@ otp_release:
   - 22.3
 
 before_deploy:
-  - rebar3 tar
+  - rebar3 as prod tar
 
 deploy:
   provider: releases
@@ -15,7 +15,7 @@ deploy:
   skip_cleanup: true
   file_blob: true
   file:
-    - _build/default/rel/smartlb/*.tar.gz
+    - _build/prod/rel/smartlb/*.tar.gz
   on:
     tags: true
     repo: appcrash/smartlb
