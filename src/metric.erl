@@ -12,7 +12,9 @@ init(_Args) ->
   {ok, #{
     incoming_conn => 0,
     incoming_conn_fail => 0,
-    analyze_trait_timeout => 0
+    analyze_trait_timeout => 0,
+    udp_matched => 0,
+    udp_no_match => 0
   }}.
 
 

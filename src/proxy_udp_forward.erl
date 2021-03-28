@@ -14,7 +14,7 @@
 %% this forwarder use raw socket so permission should be promoted
 %% in linux, use following command:
 %% setcap cap_net_raw=ep `which beam.smp`
-%% to ensure erlang process can create raw socket
+%% to ensure erlang process can create raw socket;
 %% in freebsd, root is required
 
 -record(server_state,{
@@ -40,9 +40,16 @@ handle_call(Req,_From,State) ->
 
 handle_cast({forward,{Sip,Sport,Payload}},
 	    State=#server_state{rawsocket = Socket,ip_ident = Ident}) ->
-  {ok,Dip} = inet:parse_ipv4_address("127.0.0.1"),
-  send_udp_packet(Socket,Ident,Sip,Dip,Sport,4444,Payload),
-  {noreply,State#server_state{ip_ident = Ident + 1}};
+  case trait:analyze(Payload) of
+    {match,{DipStr,Dport}} ->
+      {_,Dip} = inet:parse_ipv4_address(DipStr),
+      send_udp_packet(Socket,Ident,Sip,Dip,Sport,Dport,Payload),
+      metric:event(udp_matched),
+      {noreply,State#server_state{ip_ident = Ident + 1}};
+    no_match ->
+      metric:event(udp_no_match),
+      {noreply,State}
+  end;
 handle_cast(stop,State) ->
   {stop,normal,State}.
 
@@ -123,11 +130,10 @@ make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,Payload) ->
       %logger:info("calc pseudo header offset:~p ~p",[Offset,utils:bit_format(IpHeader)]),
       <<IpHeader/binary, Sport:16/big, Dport:16/big, TotalUdpLength:16/big,
 	Sum:16/big,RealPayload/binary>>;
-    {only_payload,FlagBin} -> % ip payload is data(no udp header)
+    {only_payload,FlagBin} -> % ip payload is data(no udp header) when 'more frag' is set or the last frag
       IpHeader = make_ip_header(IpLength,Ident,FlagBin,?UDP_PROTOCOL,Sip,Dip),
       <<IpHeader/binary,Payload/binary>>
   end.
-
 
 make_ip_header(Length,Id,Flags,Protocol,Sip,Dip) ->
   case can_ip_offload() of
@@ -144,11 +150,11 @@ make_ip_header(Length,Id,Flags,Protocol,Sip,Dip) ->
 		       Dip/binary >>)    % destination ip                 2-bytes
   end,
   <<16#45:8,16#00:8,Length:16/big,Id:16/big,Flags/binary,
-    ?IP_TTL:8,Protocol:8,Sum:16/big,Sip/binary,Dip/binary >>.
+    ?IP_TTL:8,Protocol:8,Sum:16/big,Sip/binary,Dip/binary>>.
 
 checksum(Sum) when is_integer(Sum) ->
   if
-    Sum=<16#FFFF -> 16#FFFF - Sum;
+    Sum =< 16#FFFF -> 16#FFFF - Sum;
     true -> checksum((Sum band 16#FFFF) + (Sum bsr 16))
   end;
 checksum(Buf) ->  % Buf should be bitstring aligned to 16-bit, i.e. padding if needed
@@ -156,8 +162,7 @@ checksum(Buf) ->  % Buf should be bitstring aligned to 16-bit, i.e. padding if n
 
 can_ip_offload() ->
   case os:type() of
-    {unix,linux}  -> % linux raw socket would always fill ip checksum and length if IP_HDRINCL enabled(IPPROTO_RAW implies)
+    {unix,_}  -> % linux raw socket would always fill ip checksum and length if IP_HDRINCL enabled(IPPROTO_RAW implies)
       true;
-    {unix,freebsd} -> true;
     _ -> false
   end.
