@@ -8,7 +8,7 @@
 
 -define(UDP_PROTOCOL,17).
 -define(IP_TTL,60).
--define(UDP_MTU,1480). % 1500(ethernet) - 20(ip_hdr)
+-define(DEFAULT_UDP_MTU,1472).
 
 
 %% this forwarder use raw socket so permission should be promoted
@@ -19,16 +19,19 @@
 
 -record(server_state,{
   rawsocket,		% used to forward udp packet
-  ip_ident		% increasing identification in ip header
+  ip_ident,		% increasing identification in ip header
+  udp_mtu               % get from config
 }).
 
 start_link() ->
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 init(_) ->
+  UdpMtu = utils:get_config(udp_mtu,?DEFAULT_UDP_MTU),
   case prepare_raw_socket() of
     {ok,Socket} ->
-      State = #server_state{rawsocket = Socket,ip_ident = 1},
+      State = #server_state{rawsocket = Socket,ip_ident = 1,udp_mtu = UdpMtu},
+      logger:info("@@@@@@@@ ~p",[State]),
       {ok,State};
     {error,Reason} ->
       logger:error("udp proxy forwarder create raw socket error ~p",[Reason]),
@@ -39,11 +42,11 @@ handle_call(Req,_From,State) ->
   {reply,Req,State}.
 
 handle_cast({forward,{Sip,Sport,Payload}},
-	    State=#server_state{rawsocket = Socket,ip_ident = Ident}) ->
+	    State=#server_state{rawsocket = Socket,ip_ident = Ident,udp_mtu = Mtu}) ->
   case trait:analyze(Payload) of
     {match,{DipStr,Dport}} ->
       {_,Dip} = inet:parse_ipv4_address(DipStr),
-      send_udp_packet(Socket,Ident,Sip,Dip,Sport,Dport,Payload),
+      send_udp_packet(Socket,Ident,Sip,Dip,Sport,Dport,Mtu,Payload),
       metric:event(udp_matched),
       {noreply,State#server_state{ip_ident = Ident + 1}};
     no_match ->
@@ -75,8 +78,8 @@ prepare_raw_socket() ->
   end.
 
 
--spec send_udp_packet(integer(),integer(),inet:ip4_address(),inet:ip4_address(),integer(),integer(),binary()) -> atom().
-send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Payload) ->
+-spec send_udp_packet(integer(),integer(),inet:ip4_address(),inet:ip4_address(),integer(),integer(),integer(),binary()) -> atom().
+send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Mtu,Payload) ->
   SipBin = list_to_binary(tuple_to_list(Sip)),
   DipBin = list_to_binary(tuple_to_list(Dip)),
   UdpHdrAndPayload = <<0:64,Payload/binary>>, % prepend fake udp header(8 bytes) just to calc fragments
@@ -84,26 +87,27 @@ send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Payload) ->
   lists:foreach(fun({Flag,Offset,P}) ->
 	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,P),
 	      %logger:info("***** ~p  ~p ",[Flag,Offset]),
-	      socket:sendto(RawSocket,UdpPacket,
+	      R = socket:sendto(RawSocket,UdpPacket,
 			       #{family => inet,
 				addr => Dip,
-				port => Dport})
-	  end,fragment(UdpHdrAndPayload)).
+				port => Dport}),
+	      logger:debug("forward: (~p:~p) => (~p:~p), result:~p ",[Sip,Sport,Dip,Dport,R])
+	  end,fragment(UdpHdrAndPayload,Mtu)).
 
-fragment(Payload) -> fragment(Payload,0,[]).
-fragment(Payload,Offset,L) when byte_size(Payload) =< ?UDP_MTU ->
+fragment(Payload,Mtu) -> fragment(Payload,0,Mtu,[]).
+fragment(Payload,Offset,Mtu,L) when byte_size(Payload) =< Mtu ->
   % final packet of the fragments, reverse it so that first comes first
   if
     Offset == 0 -> lists:reverse([{dont_frag,0,Payload} | L]); % no fragment at all
     true -> lists:reverse([{last_frag,Offset,Payload} | L]) % last fragment
   end;
-fragment(Payload,Offset,L) ->
-  IncreasedOffset = ?UDP_MTU div 8,  % offset in unit of 8-bytes
+fragment(Payload,Offset,Mtu,L) ->
+  IncreasedOffset = Mtu div 8,  % offset in unit of 8-bytes
   Fragmented_Bytes = IncreasedOffset bsl 3,  % multiply 8 get consumed bytes
   NewOffset = Offset + IncreasedOffset,
   <<P:Fragmented_Bytes/binary-unit:8,Remain/binary >> = Payload,
   %logger:info("~p --------------- ~p",[byte_size(FragPayload),byte_size(Remain)]),
-  fragment(Remain,NewOffset,[{more_frag,Offset,P} | L]).
+  fragment(Remain,NewOffset,Mtu,[{more_frag,Offset,P} | L]).
 
 udp_action(dont_frag,_) -> {calc_pseudo_header,<<16#4000:16>>};
 udp_action(more_frag,Offset) when Offset == 0 -> {calc_pseudo_header,<<16#2000:16>>}; % first fragment need udp header
