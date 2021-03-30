@@ -11,8 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
     - name: Package
-      uses: appcrash/centos-erlang@043dec2c6df1986fddfcc42166994e23369b6364
+      uses: appcrash/centos-erlang@main
       with:
         rebar3_arg: as prod tar
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: smartlb
+        path: _build/prod/rel/smartlb/*.tar.gz
     
