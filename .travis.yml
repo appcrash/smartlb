@@ -3,7 +3,7 @@ language: erlang
 notifications:
   email: false
 otp_release:
-  - 22.3
+  - 23.2
 
 before_deploy:
   - rebar3 as prod tar
