@@ -1,9 +1,5 @@
--module(matcher).
--behaviour(gen_server).
--export([init/1,handle_call/3,handle_cast/2,start_link/0]).
--export([set_config/1,match/1]).
--include("common.hrl").
-
+-module(matcher_builder).
+-export([compile/1]).
 
 -type id() :: string() | atom().
 
@@ -31,42 +27,12 @@
 }).
 
 
-init(_Args) ->
-  MT = ets:new(matcher,[set,{keypos,#matcher_item.id}]),
-  BT = ets:new(backend,[set,{keypos,#backend_item.id}]),
-  RT = ets:new(rule,[set,{keypos,#rule_item.id}]),
-  {ok,#{matcher => MT,backend => BT,rule => RT}}.
+-spec compile([term()]) -> [function()].
+compile(Terms) ->
+  MT = ets:new(matcher,[set,private,{keypos,#matcher_item.id}]),
+  BT = ets:new(backend,[set,private,{keypos,#backend_item.id}]),
+  RT = ets:new(rule,[set,private,{keypos,#rule_item.id}]),
 
-start_link() ->
-  gen_server:start_link({local,?MODULE},?MODULE,[],[]).
-
-
-handle_call({set_config,Terms},_From,State) ->
-  NewState=build_terms(Terms,State),
-  {reply,ok,NewState};
-handle_call({match,Data},_From,#{flow:=FlowFuncs}=State) ->
-  R = execute_flow(Data,FlowFuncs),
-  {reply,R,State};
-handle_call(Request,_From,State) ->
-  {reply,Request,State}.
-
-handle_cast(_Request,State) ->
-  {noreply,State}.
-
-
-%% ################# API ##################
--spec set_config([term()]) -> ok | error.
-set_config(Terms) ->
-  gen_server:call(?MODULE,{set_config,Terms}).
-
--spec match(binary) -> {match,tuple()} | nomatch.
-match(Data) ->
-  gen_server:call(?MODULE,{match,Data}).
-%% ################# API ##################
-
-
-
-build_terms(Terms,#{matcher:=MT,backend:=BT,rule:=RT}=State) ->
   %% basic transformation, sanity check
   ALL = lists:flatmap(
     fun(E) ->
@@ -97,8 +63,8 @@ build_terms(Terms,#{matcher:=MT,backend:=BT,rule:=RT}=State) ->
 		end
 	    end,[],ALL),
   %% important!!! keep the rule order as config file, remember to reverse
-  FlowFuncs = compose_flow(lists:reverse(Flows),State),
-  State#{flow=>FlowFuncs}.
+  compile_flow(lists:reverse(Flows),
+			   #{matcher=>MT,backend=>BT,rule=>RT}).
 
 build_matcher(M) ->
   lists:map(
@@ -142,7 +108,7 @@ build_flow(F) ->
 
 %% connect matcher,rule and backend by building function
 %% defined by flow item info, the sanity check is performed by the way
-compose_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
+compile_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
 	     #{matcher:=MT,backend:=BT,rule:=RT}) when is_record(Flow,flow_item) ->
   [#rule_item{id=RuleId,matcher_id=Mid,rule_func=RuleFunc}] = ets:lookup(RT,RuleId),
   [#matcher_item{match_func=MatchFunc}] = ets:lookup(MT,Mid),
@@ -165,7 +131,7 @@ compose_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
 	    end;
 	  Cache -> {Cache,MatchCacheMap}
 	end,
-      %% match result it definite and cached now
+      %% match-result is definite and cached now
       case MatchResult of
 	nomatch -> {nomatch,NewCacheMap};
 	MatchedList ->
@@ -176,16 +142,5 @@ compose_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
 	  end
       end
   end;
-compose_flow(Flows,State) ->
-  lists:map(fun(F) -> compose_flow(F,State) end,Flows).
-
--spec execute_flow(binary(),[function()]) -> {match,tuple()} | nomatch.
-execute_flow(Data,FlowFuncs) ->
-  execute_flow(Data,FlowFuncs,#{}).
-execute_flow(_,[],_) -> nomatch;
-execute_flow(Data,[H|T],Cache) ->
-  case H(Data,Cache) of
-    {nomatch,NewCache} ->
-      execute_flow(Data,T,NewCache);
-    {match,Host} -> {match,Host}
-  end.
+compile_flow(Flows,State) ->
+  lists:map(fun(F) -> compile_flow(F,State) end,Flows).

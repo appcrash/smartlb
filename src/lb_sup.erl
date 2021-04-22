@@ -16,6 +16,21 @@ init(_) ->
         worker,
         [config]
       },
+      {metric,
+        {metric,start_link,[]},
+        permanent,
+        5000,
+        worker,
+        [metric]
+      },
+      {matcher_master,
+        {matcher_master,start_link,[]},
+        permanent,
+        5000,
+        worker,
+        [matcher_master]
+      },
+
       {trait,                   %tag
         {trait,start_link,[]},  %mfa
         permanent,   % restart
@@ -36,13 +51,6 @@ init(_) ->
         5000,
         supervisor,
         [proxy_udp_sup]
-      },
-      {metric,
-        {metric,start_link,[]},
-        permanent,
-        5000,
-        worker,
-        [metric]
       }
 
 

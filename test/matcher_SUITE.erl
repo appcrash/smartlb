@@ -8,29 +8,34 @@ all() ->
 
 
 init_per_testcase(_Case,Config) ->
-  matcher:start_link(),
+  matcher_master:start_link(),
   Config.
 
 end_per_testcase(_Case,_Config) ->
   ok.
 
 basic_test(Config) ->
-  P = get_test_path(Config,"basic.conf"),
-  {ok,Terms} = file:script(P),
-  matcher:set_config(Terms),
-  {match,[{"127.0.0.1",8080}]} = matcher:match(<<"2342rsfds match_me: someword iweowirf">>),
+  set_matcher_config(Config,"basic.conf"),
+  {match,[{"127.0.0.1",8080}]} = match_by(<<"2342rsfds match_me: someword iweowirf">>),
   ok.
 
 
 cache_test(Config) ->
-  P = get_test_path(Config,"cache.conf"),
-  {ok,Terms} = file:script(P),
-  matcher:set_config(Terms),
-  {match,[{"192.168.1.1",8080}]} = matcher:match(<<"2342rsfds match_me: otherword iweowirf">>),
-  nomatch = matcher:match(<<"2342rsfds match_me: otherword1 iweowirf">>),
+  set_matcher_config(Config,"cache.conf"),
+  {match,[{"192.168.1.1",8080}]} = match_by(<<"2342rsfds match_me: otherword iweowirf">>),
+  nomatch = match_by(<<"2342rsfds match_me: otherword1 iweowirf">>),
   ok.
 
+match_by(Data) ->
+  matcher_master:match(Data),
+  receive
+    {match_result,R} ->
+      R
+  end.
 
-get_test_path(Config,Filename) ->
+set_matcher_config(Config,Filename) ->
   DataDir = ?config(data_dir,Config),
-  filename:join([DataDir,Filename]).
+  P = filename:join([DataDir,Filename]),
+  {ok,Terms} = file:script(P),
+  FlowFuncs = matcher_builder:compile(Terms),
+  matcher_master:set_config(FlowFuncs).
