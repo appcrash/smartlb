@@ -1,5 +1,5 @@
 -module(matcher_builder).
--export([compile/1]).
+-export([build/1]).
 
 -type id() :: string() | atom().
 
@@ -26,6 +26,19 @@
  target :: tuple()
 }).
 
+-spec build([term()]) -> [function()].
+build(Terms) ->
+  S = self(),  % closure!
+  spawn(fun() -> compile_and_notify(Terms,S) end),
+  receive
+    {flow_compile_result,Result} ->
+      Result
+  end.
+
+compile_and_notify(Terms,Pid) ->
+  io:format("##############"),
+  F = compile(Terms),
+  Pid ! {flow_compile_result,F}.
 
 -spec compile([term()]) -> [function()].
 compile(Terms) ->

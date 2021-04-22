@@ -33,5 +33,5 @@ set_matcher_config(Config,Filename) ->
   DataDir = ?config(data_dir,Config),
   P = filename:join([DataDir,Filename]),
   {ok,Terms} = file:script(P),
-  FlowFuncs = matcher_builder:compile(Terms),
+  FlowFuncs = matcher_builder:build(Terms),
   matcher_master:set_config(FlowFuncs).
