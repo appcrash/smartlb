@@ -8,7 +8,7 @@
 %% it load balance the requests to workers, supervise workers
 %%
 %% the API contract: clients call match/1 of matcher_master, and will get async notify
-%% {match_result,Result :: {match,M} | nomatch}
+%% {match_result,Result :: {match,M} | need_more | nomatch}
 %% this cause inconvenience but can dispatch match request among workers that is
 %% useful to extend CPU power under heavy load
 
@@ -69,7 +69,7 @@ set_config(FlowFuncs) ->
 %% for performance reason, use async instead of gen_sever:call
 %% match_result response would be sent to requesting process later
 %% matched result is {host,port}
--spec match(binary()) -> {match,{string(),integer()}} | nomatch.
+-spec match(binary()) -> {match,{string(),integer()}} | need_more | nomatch.
 match(Data) ->
   gen_server:cast(?MODULE,{match_request,Data,self()}),
   %% selectively waiting for match result
