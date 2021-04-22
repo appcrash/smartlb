@@ -135,9 +135,10 @@ compile_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
       case MatchResult of
 	nomatch -> {nomatch,NewCacheMap};
 	MatchedList ->
-	  case RuleFunc(MatchedList) of
+	  case RuleFunc(Data,MatchedList) of
 	    true ->
 	      {match,Host};
+	    need_more -> need_more;
 	    _ -> {nomatch,NewCacheMap}
 	  end
       end

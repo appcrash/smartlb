@@ -43,13 +43,15 @@ handle_call(Req,_From,State) ->
 
 handle_cast({forward,{Sip,Sport,Payload}},
 	    State=#server_state{rawsocket = Socket,ip_ident = Ident,udp_mtu = Mtu}) ->
-  case trait:analyze(Payload) of
+  case matcher_master:match(Payload) of
     {match,{DipStr,Dport}} ->
       {_,Dip} = inet:parse_ipv4_address(DipStr),
       send_udp_packet(Socket,Ident,Sip,Dip,Sport,Dport,Mtu,Payload),
       metric:event(udp_matched),
       {noreply,State#server_state{ip_ident = Ident + 1}};
-    no_match ->
+    _ ->
+      %% nomatch or need_more, as udp packet itself cannot be merged or defragmented, either
+      %% of them means no chance
       metric:event(udp_no_match),
       {noreply,State}
   end;

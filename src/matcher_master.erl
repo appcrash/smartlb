@@ -68,10 +68,11 @@ set_config(FlowFuncs) ->
 
 %% for performance reason, use async instead of gen_sever:call
 %% match_result response would be sent to requesting process later
--spec match(binary()) -> ok.
+%% matched result is {host,port}
+-spec match(binary()) -> {match,{string(),integer()}} | nomatch.
 match(Data) ->
   gen_server:cast(?MODULE,{match_request,Data,self()}),
-  %% selectively waitting for match result
+  %% selectively waiting for match result
   receive
     {match_result,Result} ->
       Result

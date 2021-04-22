@@ -20,7 +20,7 @@ loop(FlowFuncs) ->
   loop(F).
 
 
--spec execute_flow(binary(),[function()]) -> {match,tuple()} | nomatch.
+-spec execute_flow(binary(),[function()]) -> {match,tuple()} | need_more | nomatch.
 execute_flow(Data,FlowFuncs) ->
   execute_flow(Data,FlowFuncs,#{}).
 execute_flow(_,[],_) -> nomatch;
@@ -28,5 +28,6 @@ execute_flow(Data,[H|T],Cache) ->
   case H(Data,Cache) of
     {nomatch,NewCache} ->
       execute_flow(Data,T,NewCache);
-    {match,Host} -> {match,Host}
+    {match,Host} -> {match,Host};
+    need_more -> need_more
   end.
