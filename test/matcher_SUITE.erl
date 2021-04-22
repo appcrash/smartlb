@@ -27,11 +27,7 @@ cache_test(Config) ->
   ok.
 
 match_by(Data) ->
-  matcher_master:match(Data),
-  receive
-    {match_result,R} ->
-      R
-  end.
+  matcher_master:match(Data).
 
 set_matcher_config(Config,Filename) ->
   DataDir = ?config(data_dir,Config),

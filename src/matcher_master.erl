@@ -1,18 +1,26 @@
 -module(matcher_master).
 -behaviour(gen_server).
--export([init/1,handle_call/3,handle_cast/2,start_link/0]).
+-export([init/1,handle_call/3,handle_cast/2,handle_info/2,start_link/0]).
 -export([set_config/1,match/1]).
 -include("common.hrl").
 
-
+%% the matcher master is nothing but entrypoint of match request, configuration updating,
+%% it load balance the requests to workers, supervise workers
+%%
+%% the API contract: clients call match/1 of matcher_master, and will get async notify
+%% {match_result,Result :: {match,M} | nomatch}
+%% this cause inconvenience but can dispatch match request among workers that is
+%% useful to extend CPU power under heavy load
 
 init(_Args) ->
   WorkerNum = application:get_env(smartlb,matcher_worker,1),
   WorkerPid = [matcher_worker:start_link() || _ <- lists:seq(1,WorkerNum)],
+  process_flag(trap_exit,true),
   {ok,#{
 	worker_list => WorkerPid,
 	worker_index => 1,
-	worker_num => WorkerNum
+	worker_num => WorkerNum,
+	flow_funcs => []
        }}.
 
 start_link() ->
@@ -21,7 +29,7 @@ start_link() ->
 
 handle_call({set_config,Funcs},_From,#{worker_list:=WL}=State) ->
   broadcast({update_config,Funcs},WL),
-  {reply,ok,State};
+  {reply,ok,State#{flow_funcs:=Funcs}};
 handle_call(Request,_From,State) ->
   {reply,Request,State}.
 
@@ -34,6 +42,16 @@ handle_cast({match_request,_,_}=Msg,#{worker_list:=WL,worker_index:=I}=State) ->
 handle_cast(_Request,State) ->
   {noreply,State}.
 
+
+handle_info({'EXIT',Pid,Reason},#{worker_list:=WL}=State) ->
+  logger:error("matcher worker ~p died with reason ~p",[Pid,Reason]),
+  %% restart the died worker process
+  WL1 = lists:delete(Pid,WL),
+  NPid = matcher_worker:start_link(),
+  WL2 = [NPid | WL1],
+  {noreply,State#{worker_list:=WL2}};
+handle_info(_,State) ->
+  {noreply,State}.
 
 broadcast(Msg,Workerlist) ->
   lists:foreach(
@@ -52,6 +70,15 @@ set_config(FlowFuncs) ->
 %% match_result response would be sent to requesting process later
 -spec match(binary()) -> ok.
 match(Data) ->
-  gen_server:cast(?MODULE,{match_request,Data,self()}).
+  gen_server:cast(?MODULE,{match_request,Data,self()}),
+  %% selectively waitting for match result
+  receive
+    {match_result,Result} ->
+      Result
+  after
+    3000 ->
+      logger:error("match master wait for result timeout"),
+      nomatch
+  end.
 
 %% ################# API ##################
