@@ -16,9 +16,15 @@ init(_Args) ->
   WorkerNum = application:get_env(smartlb,matcher_worker,1),
   WorkerPid = [matcher_worker:start_link() || _ <- lists:seq(1,WorkerNum)],
   process_flag(trap_exit,true),
+  WorkerArray = array:new([{size,length(WorkerPid)},{fixed,true}]),
+  {WA,_} = lists:foldl(
+    fun(Pid,{Array,Index}) ->
+	NewArray = array:set(Index,Pid,Array),
+	{NewArray,Index + 1}
+    end,{WorkerArray,0},WorkerPid),
   {ok,#{
-	worker_list => WorkerPid,
-	worker_index => 1,
+	worker_array => WA,
+	worker_index => 0,
 	worker_num => WorkerNum,
 	flow_funcs => []
        }}.
@@ -27,37 +33,38 @@ start_link() ->
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 
-handle_call({set_config,Funcs},_From,#{worker_list:=WL}=State) ->
+handle_call({set_config,Funcs},_From,#{worker_array:=WL}=State) ->
   broadcast({update_config,Funcs},WL),
   {reply,ok,State#{flow_funcs:=Funcs}};
 handle_call(Request,_From,State) ->
   {reply,Request,State}.
 
-handle_cast({match_request,_,_}=Msg,#{worker_list:=WL,worker_index:=I}=State) ->
-  N = length(WL),
-  II = (I rem N) + 1,
-  WorkerPid = lists:nth(I,WL),
+handle_cast({match_request,_,_}=Msg,#{worker_num:=N,worker_array:=WL,worker_index:=I}=State) ->
+  II = (I+1) rem N,
+  WorkerPid = array:get(I,WL),
   WorkerPid ! Msg,
   {noreply,State#{worker_index:=II}};
 handle_cast(_Request,State) ->
   {noreply,State}.
 
 
-handle_info({'EXIT',Pid,Reason},#{worker_list:=WL}=State) ->
+handle_info({'EXIT',Pid,Reason},#{worker_array:=WL}=State) ->
   logger:error("matcher worker ~p died with reason ~p",[Pid,Reason]),
   %% restart the died worker process
   WL1 = lists:delete(Pid,WL),
   NPid = matcher_worker:start_link(),
   WL2 = [NPid | WL1],
-  {noreply,State#{worker_list:=WL2}};
+  {noreply,State#{worker_array:=WL2}};
 handle_info(_,State) ->
   {noreply,State}.
 
-broadcast(Msg,Workerlist) ->
-  lists:foreach(
-    fun(Pid) ->
-	Pid ! Msg
-    end,Workerlist).
+broadcast(Msg,WorkerArray) ->
+  %% array is 0-based
+  array:sparse_foldl(
+    fun(Index,Pid,Acc) ->
+	Pid ! {broadcast,Index,Msg},
+	Acc
+    end,0,WorkerArray).
 
 %% ################# API ##################
 

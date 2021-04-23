@@ -12,7 +12,8 @@
 {
  id :: id(),
  strategy :: string(),
- host :: [tuple()]
+ host :: [tuple()],
+ select_func = nil :: function()
 }).
 -record(rule_item,
 {
@@ -36,7 +37,6 @@ build(Terms) ->
   end.
 
 compile_and_notify(Terms,Pid) ->
-  io:format("##############"),
   F = compile(Terms),
   Pid ! {flow_compile_result,F}.
 
@@ -102,9 +102,33 @@ build_matcher(M) ->
     end,M).
 
 build_backend(B) ->
+  %% build selection function that accept flow state and
+  %% output selection result and new flow state
   lists:map(
-    fun(#{id := Id,strategy := Strt,host := Host}) ->
-	#backend_item{id=Id,strategy=Strt,host=Host}
+    fun(#{id := Id,strategy := Strategy,host := Host}) ->
+	N = length(Host),
+	SelectFunc =
+	  case N of
+	    1 ->
+	      [OnlyHost] = Host,
+	      fun(FS) -> {OnlyHost,FS} end;
+	    _ ->
+	      case Strategy of
+		"round-robin" ->
+		  fun(#{worker_id:=Wid}=FlowState) ->
+		      %% use worker id to keep initial state
+		      %% load balanced
+		      BackendState = maps:get(Id,FlowState,Wid rem N),
+		      NewState = (BackendState rem N) + 1,
+		      SelectedHost = lists:nth(NewState,Host),
+		      {SelectedHost,maps:put(Id,NewState,FlowState)}
+		  end;
+		R ->
+		  logger:error("matcher build: unknown strategy ~p",[R]),
+		  error(wrong_strategy)
+	      end
+	  end,
+	#backend_item{id=Id,strategy=Strategy,host=Host,select_func=SelectFunc}
     end,B).
 
 build_rule(R) ->
@@ -127,11 +151,25 @@ compile_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
   [#matcher_item{match_func=MatchFunc}] = ets:lookup(MT,Mid),
   case Target of
     {backend,Bid} ->
-      [#backend_item{host=Host}] = ets:lookup(BT,Bid)
+      [#backend_item{select_func=SelectFunc}] = ets:lookup(BT,Bid)
   end,
 
-  %% build the rule function
-  fun(Data,MatchCacheMap) ->
+  %% build the flow function:
+  %% it take matching data, match cache and flow state as input
+  %% applying user-provided rule function and backend selection function
+  %% to get final result: {ip,port}, or nomatch, need_more
+  %%
+  %% {match,{ip,port},State}:  match is hit, it is final result
+  %% {need_more,State}: match is not hit, more data is need, also final result
+  %% {nomatch,MatchCache,State}: match is not hit, seeking next flow function,
+  %% it it not final result
+  %%
+  %% NOTE:
+  %% match cache lasts only in a single matching request and flow state persist
+  %% during the whole time until next config update.
+  %% the flow state should always return no mattter matched or not, as
+  %% flow-state is used by all stateful unit, i.e. backend selection
+  fun(Data,MatchCacheMap,FlowState) ->
       %% search match cache before invoke match_func
       {MatchResult,NewCacheMap} =
 	case maps:get(Mid,MatchCacheMap,none) of
@@ -146,13 +184,15 @@ compile_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
 	end,
       %% match-result is definite and cached now
       case MatchResult of
-	nomatch -> {nomatch,NewCacheMap};
+	nomatch -> {nomatch,NewCacheMap,FlowState};
 	MatchedList ->
 	  case RuleFunc(Data,MatchedList) of
 	    true ->
-	      {match,Host};
-	    need_more -> need_more;
-	    _ -> {nomatch,NewCacheMap}
+	      %% rule matched, go to the target
+	      {Host,S1} = SelectFunc(FlowState),
+	      {match,Host,S1};
+	    need_more -> {need_more,FlowState};
+	    _ -> {nomatch,NewCacheMap,FlowState}
 	  end
       end
   end;
