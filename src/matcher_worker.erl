@@ -19,6 +19,8 @@ loop(FlowFuncs,S) ->
 	  {update_config,NewFlowFuncs} ->
 	    {NewFlowFuncs, #{worker_id=>WorkerId}}	% use new state
 	end;
+      test_kill ->
+	exit(test_kill);
       Other ->
 	logger:error("matcher_work receive unknown msg: ~p",[Other]),
 	{FlowFuncs,S}

@@ -2,6 +2,11 @@
 -behaviour(gen_server).
 -export([init/1,handle_call/3,handle_cast/2,handle_info/2,start_link/0]).
 -export([set_config/1,match/1]).
+
+-ifdef(TEST).
+-export([kill_worker/0]).
+-endif.
+
 -include("common.hrl").
 
 %% the matcher master is nothing but entrypoint of match request, configuration updating,
@@ -39,22 +44,40 @@ handle_call({set_config,Funcs},_From,#{worker_array:=WL}=State) ->
 handle_call(Request,_From,State) ->
   {reply,Request,State}.
 
-handle_cast({match_request,_,_}=Msg,#{worker_num:=N,worker_array:=WL,worker_index:=I}=State) ->
-  II = (I+1) rem N,
-  WorkerPid = array:get(I,WL),
+handle_cast({match_request,_,_}=Msg,State) ->
+  {WorkerPid,NewState} = select_worker(State),
   WorkerPid ! Msg,
-  {noreply,State#{worker_index:=II}};
+  {noreply,NewState};
+handle_cast(test_kill,State) ->
+  {WorkerPid,NewState} = select_worker(State),
+  WorkerPid ! test_kill,
+  {noreply,NewState};
 handle_cast(_Request,State) ->
   {noreply,State}.
 
+select_worker(#{worker_num:=N,worker_array:=WL,worker_index:=I}=State) ->
+  II = (I+1) rem N,
+  {array:get(I,WL),State#{worker_index:=II}}.
 
-handle_info({'EXIT',Pid,Reason},#{worker_array:=WL}=State) ->
+
+
+handle_info({'EXIT',Pid,Reason},#{worker_array:=WA,flow_funcs:=FF}=State) ->
   logger:error("matcher worker ~p died with reason ~p",[Pid,Reason]),
   %% restart the died worker process
-  WL1 = lists:delete(Pid,WL),
-  NPid = matcher_worker:start_link(),
-  WL2 = [NPid | WL1],
-  {noreply,State#{worker_array:=WL2}};
+  WL = array:to_list(WA),
+  NewWA =
+    case utils:index_of(Pid,WL) of
+      none ->
+	logger:error("master worker with pid ~p died but cannot be found",[Pid]),
+	WA;
+      Position ->
+	%% found died worker's pid position, restart a new process and replace it
+	NPid = matcher_worker:start_link(),
+	%% and notify the latest config
+	NPid ! {broadcast,Position,{update_config,FF}},
+	array:set(Position,NPid,WA)
+    end,
+  {noreply,State#{worker_array:=NewWA}};
 handle_info(_,State) ->
   {noreply,State}.
 
@@ -88,5 +111,10 @@ match(Data) ->
       logger:error("match master wait for result timeout"),
       nomatch
   end.
+
+-ifdef(TEST).
+kill_worker() ->
+  gen_server:cast(?MODULE,test_kill).
+-endif.
 
 %% ################# API ##################

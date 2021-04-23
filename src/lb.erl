@@ -7,7 +7,7 @@ start(_Type,_StartArgs) ->
   {ok,Pid} = lb_sup:start_link(),
   case utils:get_config(tcp_enable,false) of
     true ->
-      R = supervisor:start_child(
+      supervisor:start_child(
 	lb_sup,
 	 #{
 	   id => proxy_tcp,
@@ -17,8 +17,7 @@ start(_Type,_StartArgs) ->
 	   type => worker,
 	   modules => [proxy_tcp]
 	  }
-	),
-      logger:info("Start child ~p",[R]);
+	);
     _ ->
       logger:info("tcp server not enabled)")
   end,

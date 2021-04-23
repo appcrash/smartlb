@@ -3,7 +3,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-  [basic_test,cache_test,load_balance_test].
+  [basic_test,cache_test,load_balance_test,kill_test].
 
 
 
@@ -38,6 +38,14 @@ load_balance_test(Config) ->
   Expected = [X || {match,X} <- Matched],
   ok.
 
+kill_test(Config) ->
+  set_matcher_config(Config,"basic.conf"),
+  {match,{"127.0.0.1",8080}} = match_by(<<"2342rsfds match_me: someword iweowirf">>),
+  {ok,Num} = application:get_env(smartlb,matcher_worker),
+  [matcher_master:kill_worker() || _ <- lists:seq(1,Num)],
+  timer:sleep(50),
+  {match,{"127.0.0.1",8080}} = match_by(<<"2342rsfds match_me: someword iweowirf">>),
+  ok.
 
 match_by(Data) ->
   matcher_master:match(Data).
