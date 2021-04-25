@@ -59,7 +59,7 @@ handle_cast(stop,State) ->
   {stop,normal,State}.
 
 terminate(Reason, _State = #server_state{rawsocket = Socket}) ->
-  logger:error("udp proxy forwarder terminated ~p",[Reason]),
+  logger:info("udp proxy forwarder terminated ~p",[Reason]),
   socket:close(Socket).
 
 % forward Data collected by gen_udp

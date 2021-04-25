@@ -1,2 +1,85 @@
-{matcher,"(?i)service-provider:\\s*(\\w+)\\s*\r\n","google",[{"127.0.0.1",9000},{"127.0.0.1",9001}]}.
-{default_matcher,2000,[{"192.168.1.1",20000}]}.
+[
+
+{matcher,
+  [
+    #{
+      id => "sp",
+      type => "regex",
+      pattern => "(?i)service-provider:\\s*(\\w+)\\s*\r\n",
+      capture => [1]
+    },
+
+    #{
+      id => "always_match",
+      type => "func",
+      function => fun(_) -> {match,[]} end
+    }
+  ]
+},
+
+{rule,
+  [
+    #{
+      id => "sp",
+      matcher_id => "sp",
+      condition => fun(_,[A]) -> A == "google" end
+    },
+
+    #{
+      id => "threshold",    % buffer enough data before match failure
+      matcher_id => "always_match",
+      condition => fun(Data,_) ->
+        S = byte_size(Data),
+        if
+          S < 20 -> need_more;
+          true -> nomatch
+        end
+      end
+    },
+    
+    #{
+      id => "default",
+      matcher_id => "always_match",
+      condition => fun(_,_) -> true end
+    }
+    
+  ]
+},
+
+{backend,
+  [
+    #{
+      id => "t1",
+      strategy => "round-robin",
+      host => [{"127.0.0.1",9000}]
+    },
+
+    #{
+      id => "t2",
+      strategy => "round-robin",
+      host => [{"127.0.0.1",9001}]
+    }
+  ]
+},
+
+
+
+{flow,
+  [
+    #{
+      match_rule => "sp",
+      target => {backend,"t1"}
+    },
+    #{
+      match_rule => "threshold"
+    },
+    #{
+      match_rule => "default",
+      target => {backend,"t2"}
+    }
+    
+  ]
+}
+
+
+].

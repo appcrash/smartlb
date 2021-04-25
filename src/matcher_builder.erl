@@ -139,7 +139,8 @@ build_rule(R) ->
 
 build_flow(F) ->
   lists:map(
-    fun(#{match_rule := Mr,target := Target}) ->
+    fun(#{match_rule := Mr}=Flow) ->
+	Target = maps:get(target,Flow,no_target),
 	#flow_item{match_rule=Mr,target=Target}
     end,F).
 
@@ -151,7 +152,8 @@ compile_flow(#flow_item{match_rule=RuleId,target=Target}=Flow,
   [#matcher_item{match_func=MatchFunc}] = ets:lookup(MT,Mid),
   case Target of
     {backend,Bid} ->
-      [#backend_item{select_func=SelectFunc}] = ets:lookup(BT,Bid)
+      [#backend_item{select_func=SelectFunc}] = ets:lookup(BT,Bid);
+    _ -> SelectFunc = fun() -> nothing end
   end,
 
   %% build the flow function:

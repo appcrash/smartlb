@@ -28,7 +28,7 @@ Config file is in form of:
 > {flow, [ flows ... ]}
 > ].
 
-## Matcher
+## matcher
 
 Each Mathcer has an id which can be referenced by rules, and has a type of **regex** or **function**. The goal of matcher is extracting values from packet binary, like specific http header value, protocol vesion etc. With regex type stdlib *re* of erlang is used for matching with **pattern** and **capture** key as argument. The reuslt of matcher is a list of *captured* group in the regex pattern from the packet binary. You can also define a custom function with packet binary as sole argument and return a list as result.
 
