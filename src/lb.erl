@@ -21,7 +21,7 @@ start(_Type,_StartArgs) ->
 	  }
 	);
     _ ->
-      logger:info("tcp server not enabled)")
+      logger:info("tcp server not enabled")
   end,
 
   case utils:get_config(udp_enable,false) of
@@ -38,10 +38,11 @@ start(_Type,_StartArgs) ->
 	 }
        );
     _ ->
-      logger:info("udp server not enabled)")
+      logger:info("udp server not enabled")
   end,
 
-  {ok,Terms} = file:script("lb.conf"),
+  FlowFile = utils:get_config(flow_file,"lb.conf"),
+  {ok,Terms} = file:script(FlowFile),
   FlowFuncs = matcher_builder:build(Terms),
   logger:info("FlowFuncs Terms ~p",[Terms]),
   matcher_master:set_config(FlowFuncs),

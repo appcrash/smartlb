@@ -34,10 +34,27 @@ build(Terms) ->
   receive
     {flow_compile_result,Result} ->
       Result
+  after
+    10000 ->
+      logger:error("matcher builder timeout"),
+      []
   end.
 
 compile_and_notify(Terms,Pid) ->
-  F = compile(Terms),
+  F =
+    try
+      compile(Terms)
+    catch
+      error:R ->
+	logger:error("matcher builder error: ~p",[R]),
+	[];
+      throw:R ->
+	logger:error("matcher builder exception: ~p",[R]),
+	[];
+      exit:R ->
+	logger:error("matcher builder exit ~p",[R]),
+	[]
+    end,
   Pid ! {flow_compile_result,F}.
 
 -spec compile([term()]) -> [function()].

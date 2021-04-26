@@ -9,23 +9,30 @@ It is a smiple tcp/udp proxy/forwarder based on a set of rules.
 The rules works by inspect the initial contents of packet and determine the destination of the incoming connection being proxied to.
 
 
-# Config File
+# Flow config File
 
-lb.conf is the main config file. it should be in the same directory of lb working dir.
+Flow file is the main config file. it should be configed in the *sys.config*, default is "lb.conf".
 
 For simplicity, it just contains the erlang terms that will be evaluated at runtime. The whole config is an array of tuples whose keys are of **matcher**,**rule**,**backend**,**flow**:
 
 > tuples() :: [{key(),value()}]
+
 > key() :: matcher | rule | backend | flow
+
 > value() :: map()
 
 Config file is in form of:
 
 > [
+
 > {matcher, [ matchers ... ]},
+
 > {backend, [ backends ... ]},
+
 > {rule, [ rules ... ]},
+
 > {flow, [ flows ... ]}
+
 > ].
 
 ## matcher
@@ -95,4 +102,5 @@ Then the matcher worker execute every matching request by each flow item and sen
 - tcp_port(integer): the tcp proxy listening port
 - metric_http_port(integer): the http port to receive metric data
 
+- flow_file(string): the main flow configuration file
 - matcher_worker(integer): the number of process exectuing matching request
