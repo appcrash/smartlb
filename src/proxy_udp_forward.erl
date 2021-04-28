@@ -31,7 +31,7 @@ init(_) ->
   case prepare_raw_socket() of
     {ok,Socket} ->
       State = #server_state{rawsocket = Socket,ip_ident = 1,udp_mtu = UdpMtu},
-      logger:info("@@@@@@@@ ~p",[State]),
+      %% logger:info("@@@@@@@@ ~p",[State]),
       {ok,State};
     {error,Reason} ->
       logger:error("udp proxy forwarder create raw socket error ~p",[Reason]),

@@ -42,8 +42,7 @@ match_test(_Config) ->
 
   S1 = connect_to_lb(),
   DataMatch = <<"oewfjwewkds service-provider: google \r\nsdlifjwweif">>,
-  R = gen_tcp:send(S1,DataMatch),
-  ct:log("R is ~p",[R]),
+  gen_tcp:send(S1,DataMatch),
   DataMatch = ?EXPECT_RECEIVE(match),
   S2 = connect_to_lb(),
   DataNoMatch = <<"some data that would not be matched">>,
@@ -62,11 +61,7 @@ need_more_test(_Config) ->
   Data1 = <<"small data">>,
   Data2 = <<"more data, big enough to get match result">>,
   gen_tcp:send(S,Data1),
-  timeout = receive
-	      {default,D1} -> D1
-	    after
-	      1000 -> timeout
-	    end,
+  timeout = ?EXPECT_RECEIVE(default),
   gen_tcp:send(S,Data2),
   D =  <<Data1/binary,Data2/binary>>,
   D = ?EXPECT_RECEIVE(default),
@@ -75,15 +70,6 @@ need_more_test(_Config) ->
   Data3 = ?EXPECT_RECEIVE(default),
   gen_tcp:close(S),
   ok.
-
-
-expect_receive(Key) ->
-  receive
-    {K,V} when K =:= Key -> V
-  after
-    1000 -> timeout
-  end.
-
 
 connect_to_lb() ->
   {ok,LbPort} = application:get_env(smartlb,tcp_port),
