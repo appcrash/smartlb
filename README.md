@@ -1,6 +1,6 @@
 ![build status][1]
 
-[1]: https://www.travis-ci.org/appcrash/smartlb.svg?branch=master
+[1]: https://github.com/appcrash/smartlb/actions/workflows/erlang.yml/badge.svg
 
 # What is smartlb
 

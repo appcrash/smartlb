@@ -25,7 +25,6 @@ end_per_suite(_Config) ->
 massive_test(_Config) ->
   CS = create_count_server(),
   create_udp_server(6000,CS),
-
   TestRocket =
     [ {5000,500,200,800},
       {5001,1000,400,1200},
@@ -54,8 +53,6 @@ launch_rocket(L) ->
 		      maps:put(Port,{Iter,Size},M)
 		  end
 	      end,#{},lists:seq(1,length(L))).
-
-
 
 
 create_udp_client_rocket(Port,Iteration,Start,End) ->
