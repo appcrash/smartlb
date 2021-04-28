@@ -16,23 +16,23 @@ Flow file is the main config file. it should be configed in the *sys.config*, de
 For simplicity, it just contains the erlang terms that will be evaluated at runtime. The whole config is an array of tuples whose keys are of **matcher**,**rule**,**backend**,**flow**:
 
 > tuples() :: [{key(),value()}]
-
+>
 > key() :: matcher | rule | backend | flow
-
+>
 > value() :: map()
 
 Config file is in form of:
 
 > [
-
+>
 > {matcher, [ matchers ... ]},
-
+>
 > {backend, [ backends ... ]},
-
+>
 > {rule, [ rules ... ]},
-
+>
 > {flow, [ flows ... ]}
-
+>
 > ].
 
 ## matcher
@@ -88,6 +88,7 @@ Each backend is convert to selection function:
 Each flow is convert to:
 
 > fun(Data::binary(),MatcherCache::map(),FlowState::map()) ->
+>
 > FlowResult:: {match,Host,FlowState} | {need_more,FlowState} | {nomatch,MatcherCache,FlowState}.
 
 Then the matcher worker execute every matching request by each flow item and send the result to requesting process by {match_result,Result}.

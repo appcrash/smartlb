@@ -5,7 +5,7 @@
 
 start(_Type,_StartArgs) ->
   logger:add_handler_filter(default,progress,
-			    {fun logger_filters:progress/2,stop}),
+   			    {fun logger_filters:progress/2,stop}),
   {ok,Pid} = lb_sup:start_link(),
   case utils:get_config(tcp_enable,false) of
     true ->

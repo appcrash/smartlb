@@ -13,6 +13,7 @@
 
 -record(server_state,
 {
+ listen_ip,
  port,
  init_packet_timeout,
  listen_socket = null
@@ -22,14 +23,16 @@
 start_link() ->
   Port = utils:get_config(tcp_port,?TCP_SRC_PORT),
   Timeout = utils:get_config(tcp_init_timeout,?TCP_INIT_TIMEOUT),
-  State = #server_state{port = Port,init_packet_timeout=Timeout},
-  gen_server:start_link({local,?MODULE},?MODULE,State,[]).
+  Ip = utils:get_config(tcp_ip,?TCP_SRC_IP),
+  Arg = #server_state{listen_ip=Ip,port = Port,init_packet_timeout=Timeout},
+  gen_server:start_link({local,?MODULE},?MODULE,Arg,[]).
 
 
 init(State) ->
   process_flag(trap_exit,true),
-  #server_state{port = Port} = State,
-  case gen_tcp:listen(Port,?TCP_LISTEN_OPTIONS) of
+  #server_state{listen_ip=Ip,port = Port} = State,
+  {ok,IpAddr} = inet:parse_address(Ip),
+  case gen_tcp:listen(Port,?TCP_LISTEN_OPTIONS ++ [{ip,IpAddr}]) of
       {ok, Listen_Socket} ->
           NewState = State#server_state{listen_socket = Listen_Socket},
           prefork(?PREFORK,Listen_Socket,State),

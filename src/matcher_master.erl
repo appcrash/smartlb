@@ -45,7 +45,7 @@ handle_call(Request,_From,State) ->
   {reply,Request,State}.
 
 handle_cast({match_request,_,_}=Msg,State) ->
-  {WorkerPid,NewState} = select_worker(State),
+  {WorkerPid,NewState} = select_worker(State),	% just forward request
   WorkerPid ! Msg,
   {noreply,NewState};
 handle_cast(test_kill,State) ->
