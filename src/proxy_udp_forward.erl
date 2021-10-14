@@ -85,9 +85,8 @@ send_udp_packet(RawSocket,Ident,Sip,Dip,Sport,Dport,Mtu,Payload) ->
   SipBin = list_to_binary(tuple_to_list(Sip)),
   DipBin = list_to_binary(tuple_to_list(Dip)),
   UdpHdrAndPayload = <<0:64,Payload/binary>>, % prepend fake udp header(8 bytes) just to calc fragments
-  TotalUdpLength = byte_size(UdpHdrAndPayload),
   lists:foreach(fun({Flag,Offset,P}) ->
-	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,P),
+	      UdpPacket = make_udp_packet(SipBin,DipBin,Sport,Dport,Ident,Flag,Offset,P,Payload),
 	      %logger:info("***** ~p  ~p ",[Flag,Offset]),
 	      R = socket:sendto(RawSocket,UdpPacket,
 			       #{family => inet,
@@ -116,18 +115,25 @@ udp_action(more_frag,Offset) when Offset == 0 -> {calc_pseudo_header,<<16#2000:1
 udp_action(more_frag,Offset) -> {only_payload,<<2#001:3,Offset:13/big>>};
 udp_action(last_frag,Offset) -> {only_payload,<<0:3,Offset:13/big>>}.
 
--spec make_udp_packet(binary(),binary(),integer(),integer(),integer(),atom(),integer(),integer(),binary()) -> binary().
-make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,Payload) ->
-  PL = byte_size(Payload),
-  IpLength = byte_size(Payload) + 20, % ip header(20)
+-spec make_udp_packet(binary(),binary(),integer(),integer(),integer(),atom(),integer(),binary(),binary()) -> binary().
+make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,FP,AllP) ->
+  IpLength = byte_size(FP) + 20, % ip header(20)
   case udp_action(Flag,Offset) of
     {calc_pseudo_header,FlagBin} -> % ip payload is udp header + udp payload(all or partial)
-      <<_:8/binary,RealPayload/binary>> = Payload,  % strip the fake udp header(8 bytes)
-      Udp = <<Sport:16/big, Dport:16/big,TotalUdpLength:16/big,0:16,RealPayload/binary>>,
+      TotalUdpLength = byte_size(AllP) + 8,  % add udp header length(8 bytes)
+      <<_:8/binary,RealPayload/binary>> = FP,  % strip the fake udp header(8 bytes)
+      Udp = <<Sip/binary,
+	      Dip/binary,
+	      ?UDP_PROTOCOL:16/big,
+	      TotalUdpLength:16/big,
+	      Sport:16/big,
+	      Dport:16/big,
+	      TotalUdpLength:16/big,
+	      AllP/binary>>,
       Pseudo_Header =
 	if				% padding payload if needed
-	  PL rem 2 =:= 1 -> <<Sip/binary,Dip/binary,17:16/big,PL:16/big,Udp/binary,0:8>>;
-	  true -> <<Sip/binary,Dip/binary,17:16/big,PL:16/big,Udp/binary>>
+	  TotalUdpLength rem 2 =:= 1 -> <<Udp/binary,0:8>>;
+	  true -> Udp
 	end,
 						% calculate checksum with pseudo header or set it as 0 directly without any
 						% calculation, which means checksum isn't being used
@@ -138,7 +144,7 @@ make_udp_packet(Sip,Dip,Sport,Dport,Ident,Flag,Offset,TotalUdpLength,Payload) ->
 	Sum:16/big,RealPayload/binary>>;
     {only_payload,FlagBin} -> % ip payload is data(no udp header) when 'more frag' is set or the last frag
       IpHeader = make_ip_header(IpLength,Ident,FlagBin,?UDP_PROTOCOL,Sip,Dip),
-      <<IpHeader/binary,Payload/binary>>
+      <<IpHeader/binary,FP/binary>>
   end.
 
 make_ip_header(Length,Id,Flags,Protocol,Sip,Dip) ->
