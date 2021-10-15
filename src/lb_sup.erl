@@ -9,13 +9,21 @@ start_link() ->
 init(_) ->
   {ok, {{one_for_one, 3 ,10},
     [
-      {metric,
-        {metric,start_link,[]},
+     {metric,
+       {metric,start_link,[]},
+       permanent,
+       5000,
+       worker,
+       [metric]
+     },
+     {lb_http,
+        {lb_http,start_link,[]},
         permanent,
         5000,
         worker,
-        [metric]
+        [lb_http]
       },
+
       {matcher_master,
         {matcher_master,start_link,[]},
         permanent,
