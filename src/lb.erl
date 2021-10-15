@@ -42,7 +42,7 @@ start(_Type,_StartArgs) ->
   end,
 
   case reload_config() of
-    ok -> {ok,Pid};
+    {ok,_} -> {ok,Pid};
     {error,Reason} -> {error,Reason}
   end.
 
@@ -50,15 +50,15 @@ stop(_State) ->
   ok.
 
 
--spec reload_config() -> ok | {error,string()}.
+-spec reload_config() -> {ok,term()} | {error,string()}.
 reload_config() ->
   FlowFile = utils:get_config(flow_file,"lb.conf"),
   case file:script(FlowFile) of
     {ok,Terms} ->
       FlowFuncs = matcher_builder:build(Terms),
-      logger:info("FlowFuncs Terms ~p",[Terms]),
+      logger:info("reload_config: FlowFuncs Terms ~p",[Terms]),
       matcher_master:set_config(FlowFuncs),
-      ok;
+      {ok,Terms};
     {error,Reason} when is_tuple(Reason) ->
       Desc = file:format_error(Reason),
       {error,Desc};

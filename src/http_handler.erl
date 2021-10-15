@@ -16,12 +16,15 @@ handle(<<"/metric">>,Req) ->
 		   Req);
 handle(<<"/update">>,Req) ->
   case lb:reload_config() of
-    ok ->
+    {ok,Terms} ->
+      logger:info("update config ok"),
+      Str = io_lib:format("~p",[Terms]),
       cowboy_req:reply(200,
 		       #{<<"content-type">> => <<"text/json">>},
-		       jsone:encode([{ok,<<"">>}]),
+		       jsone:encode([{ok,list_to_binary(Str)}]),
 		       Req);
     {error,Desc} ->
+      logger:info("update config failed"),
       cowboy_req:reply(200,
 		       #{<<"content-type">> => <<"text/json">>},
 		       jsone:encode([{error,list_to_binary(Desc)}]),
